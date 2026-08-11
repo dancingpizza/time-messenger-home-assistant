@@ -1,0 +1,12 @@
+{
+  "domain": "time_messenger",
+  "name": "Time Messenger",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["application_credentials"],
+  "documentation": "https://docs.time-messenger.ru/api/v4/",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "requirements": [],
+  "version": "0.1.0"
+}

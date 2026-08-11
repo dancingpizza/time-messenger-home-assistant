@@ -1,0 +1,35 @@
+[project]
+name = "time-messenger-home-assistant"
+version = "0.1.0"
+description = "Home Assistant integration for direct messages from Time Messenger"
+requires-python = ">=3.14.2"
+dependencies = ["homeassistant==2026.8.1"]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.18.2",
+  "pytest>=8.4.2",
+  "pytest-asyncio>=1.2.0",
+  "ruff>=0.14.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+  "ignore:Inheritance class HomeAssistantApplication from web.Application is discouraged:DeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+extend-exclude = [".agents", "_bmad", "_bmad-output"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+packages = ["custom_components.time_messenger"]

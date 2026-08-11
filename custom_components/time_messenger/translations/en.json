@@ -1,0 +1,59 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This Time account is already configured for this tenant.",
+      "cannot_connect": "Could not validate the Time tenant.",
+      "identity_mismatch": "The authenticated Time identity does not match this entry.",
+      "invalid_origin": "The tenant origin is invalid.",
+      "reauth_successful": "Authentication was updated.",
+      "unsupported": "This authentication method is not enabled on the tenant.",
+      "unsupported_auth_mode": "The selected authentication mode is not supported."
+    },
+    "error": {
+      "cannot_connect": "Could not connect or the tenant returned an invalid response.",
+      "identity_mismatch": "The login response and users/me identity do not match.",
+      "invalid_auth": "Time rejected these credentials.",
+      "invalid_origin": "Use an HTTPS tenant origin without a path.",
+      "unsupported": "This authentication method is disabled on the tenant."
+    },
+    "step": {
+      "pat": {
+        "data": {"token": "Personal access token"},
+        "description": "Enter a PAT created for your personal Time account.",
+        "title": "Personal access token"
+      },
+      "session": {
+        "data": {
+          "mfa_code": "MFA code (optional)",
+          "password": "Password",
+          "username": "Login"
+        },
+        "description": "The password and MFA code are sent once and are never stored.",
+        "title": "Session login"
+      },
+      "user": {
+        "data": {
+          "auth_mode": "Authentication method",
+          "tenant_origin": "Tenant origin"
+        },
+        "description": "Connect one personal Time identity. The origin cannot be changed later.",
+        "title": "Connect Time Messenger"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {"include_message_text": "Include message text in Home Assistant events"},
+        "description": "Message text is redacted by default. Enabling this can expose content to automations and event listeners.",
+        "title": "Privacy"
+      }
+    }
+  },
+  "issues": {
+    "unsupported_tenant": {
+      "description": "The Time tenant does not expose the required authenticated WebSocket capability.",
+      "title": "Time tenant capability is unsupported"
+    }
+  }
+}

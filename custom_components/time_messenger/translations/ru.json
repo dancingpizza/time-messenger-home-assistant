@@ -1,0 +1,59 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Эта учётная запись Time уже настроена для данного tenant.",
+      "cannot_connect": "Не удалось проверить tenant Time.",
+      "identity_mismatch": "Авторизованная учётная запись Time не соответствует записи.",
+      "invalid_origin": "Некорректный origin tenant.",
+      "reauth_successful": "Авторизация обновлена.",
+      "unsupported": "Этот способ авторизации не включён на tenant.",
+      "unsupported_auth_mode": "Выбранный способ авторизации не поддерживается."
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться или tenant вернул некорректный ответ.",
+      "identity_mismatch": "Identity из login и users/me не совпадают.",
+      "invalid_auth": "Time отклонил учётные данные.",
+      "invalid_origin": "Укажите HTTPS origin tenant без пути.",
+      "unsupported": "Этот способ авторизации отключён на tenant."
+    },
+    "step": {
+      "pat": {
+        "data": {"token": "Персональный токен доступа"},
+        "description": "Введите PAT своей личной учётной записи Time.",
+        "title": "Персональный токен"
+      },
+      "session": {
+        "data": {
+          "mfa_code": "Код MFA (необязательно)",
+          "password": "Пароль",
+          "username": "Логин"
+        },
+        "description": "Пароль и MFA отправляются один раз и никогда не сохраняются.",
+        "title": "Вход в сессию"
+      },
+      "user": {
+        "data": {
+          "auth_mode": "Способ авторизации",
+          "tenant_origin": "Origin tenant"
+        },
+        "description": "Подключите одну личную identity Time. Origin нельзя изменить позднее.",
+        "title": "Подключение Time Messenger"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {"include_message_text": "Включать текст сообщения в события Home Assistant"},
+        "description": "По умолчанию текст скрыт. Включение может раскрыть содержимое автоматизациям и слушателям событий.",
+        "title": "Приватность"
+      }
+    }
+  },
+  "issues": {
+    "unsupported_tenant": {
+      "description": "Tenant Time не предоставляет необходимый авторизованный WebSocket.",
+      "title": "Возможности tenant Time не поддерживаются"
+    }
+  }
+}
