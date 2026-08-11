@@ -79,6 +79,10 @@ context:
   опубликованный GitHub Release соответственно.
 - 2026-08-11: Remote CI fix — initial Runtime CI обнаружил несуществующий setup-uv
   SHA; pin заменён на официальный immutable `v9.0.0` до tag/release.
+- 2026-08-11: Remote HACS fix — action потребовала topics и asset по пути
+  `custom_components/time_messenger/brand/icon.png`; required topics добавлены в
+  repository, existing neutral icon copied to component path и packaging test
+  закрепляет этот contract.
 - 2026-08-11: Review evidence — checker игнорирует `GITHUB_REF_NAME` вне tag
   context, требует ровно один project entry в `uv.lock` и возвращает named
   nonzero diagnostic для duplicate/unreadable release surfaces без traceback.

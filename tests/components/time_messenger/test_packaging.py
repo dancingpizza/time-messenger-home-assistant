@@ -64,6 +64,7 @@ def test_hacs_uses_the_standard_single_integration_layout() -> None:
     }
     assert integration_directories == {"time_messenger"}
     assert INTEGRATION_ROOT.is_dir()
+    assert (INTEGRATION_ROOT / "brand" / "icon.png").is_file()
 
 
 def test_manifest_contains_exact_distribution_and_runtime_metadata() -> None:
