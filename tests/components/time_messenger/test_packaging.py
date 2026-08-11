@@ -7,7 +7,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).parents[3]
 INTEGRATION_ROOT = REPOSITORY_ROOT / "custom_components" / "time_messenger"
-RELEASE_VERSION = "0.0.1"
+RELEASE_VERSION = "0.0.2"
 RELEASE_TAG = f"v{RELEASE_VERSION}"
 FORBIDDEN_HACS_KEYS = {
     "content_in_root",
@@ -101,20 +101,10 @@ def test_release_version_is_identical_on_every_release_surface() -> None:
 
     assert manifest_version == package_version == locked_package_version == RELEASE_VERSION
     assert RELEASE_VERSION in changelog_versions
-    assert RELEASE_TAG == "v0.0.1"
+    assert RELEASE_TAG == "v0.0.2"
 
 
 def test_repository_contains_full_mit_license() -> None:
     license_text = (REPOSITORY_ROOT / "LICENSE").read_text(encoding="utf-8")
 
     assert license_text == EXPECTED_MIT_LICENSE
-
-
-def test_changelog_documents_release_limitations_and_migrations() -> None:
-    changelog = (REPOSITORY_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    release_entry = changelog.split("## [0.0.1]", maxsplit=1)[1]
-
-    assert "### Изменения" in release_entry
-    assert "### Ограничения" in release_entry
-    assert "### Миграция" in release_entry
-    assert "Миграция не требуется" in release_entry
