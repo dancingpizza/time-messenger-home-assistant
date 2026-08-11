@@ -4,7 +4,15 @@ from typing import Final
 
 DOMAIN: Final = "time_messenger"
 EVENT_TIME_MESSENGER: Final = "time_messenger_event"
+EVENT_TYPE_DIRECT_MESSAGE: Final = "direct_message"
 EVENT_SCHEMA_VERSION: Final = 1
+
+
+def message_signal(config_entry_id: str) -> str:
+    """Return the entry-scoped dispatcher signal for accepted messages."""
+
+    return f"{DOMAIN}_{config_entry_id}_message"
+
 
 CONF_AUTH_MODE: Final = "auth_mode"
 CONF_TENANT_ORIGIN: Final = "tenant_origin"

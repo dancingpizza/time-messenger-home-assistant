@@ -50,6 +50,18 @@
       }
     }
   },
+  "entity": {
+    "event": {
+      "direct_message": {
+        "name": "Личное сообщение",
+        "state_attributes": {
+          "event_type": {
+            "state": {"direct_message": "Получено личное сообщение"}
+          }
+        }
+      }
+    }
+  },
   "issues": {
     "unsupported_tenant": {
       "description": "Tenant Time не предоставляет необходимый авторизованный WebSocket.",

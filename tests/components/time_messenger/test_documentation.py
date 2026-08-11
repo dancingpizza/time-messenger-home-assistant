@@ -22,16 +22,24 @@ def fenced_blocks(markdown: str, language: str) -> list[str]:
     return re.findall(rf"```{language}\n(.*?)\n```", markdown, re.DOTALL)
 
 
-def test_readme_automation_example_is_parseable() -> None:
-    """Catch malformed YAML or an example wired to the wrong event."""
+def test_readme_native_and_compatibility_examples_are_parseable() -> None:
+    """Catch malformed YAML or examples wired to the wrong event interfaces."""
     markdown = readme()
     recipes = fenced_blocks(markdown, "yaml")
-    assert len(recipes) == 1
+    assert len(recipes) == 2
 
-    document = yaml.safe_load(recipes[0])
-    assert isinstance(document, dict)
-    assert document["triggers"][0]["event_type"] == "time_messenger_event"
-    assert document["actions"][0]["action"] == "persistent_notification.create"
+    native = yaml.safe_load(recipes[0])
+    assert isinstance(native, dict)
+    assert native["triggers"][0] == {
+        "trigger": "event.received",
+        "target": {"entity_id": "event.time_messenger_direct_message"},
+        "options": {"event_type": ["direct_message"]},
+    }
+    assert native["actions"][0]["action"] == "persistent_notification.create"
+
+    compatibility = yaml.safe_load(recipes[1])
+    assert isinstance(compatibility, dict)
+    assert compatibility["triggers"][0]["event_type"] == "time_messenger_event"
 
 
 def test_repository_icon_is_a_valid_square_png() -> None:
