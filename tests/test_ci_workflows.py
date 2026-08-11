@@ -8,24 +8,25 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).parents[1]
 WORKFLOWS = REPOSITORY_ROOT / ".github" / "workflows"
 PINNED_ACTION = re.compile(r"^\s*-\s+uses:\s*[^@\s]+@[0-9a-f]{40}\s*#\s+.+$", re.MULTILINE)
-EVENTS = ("pull_request:", "push:", "workflow_dispatch:")
+VALIDATION_WORKFLOWS = ("ci.yml", "hacs.yml", "hassfest.yml")
 
 
 def workflow(name: str) -> str:
     return (WORKFLOWS / name).read_text(encoding="utf-8")
 
 
-def test_every_release_workflow_covers_pr_branch_tag_and_manual_dispatch() -> None:
-    for name in ("ci.yml", "hacs.yml", "hassfest.yml"):
+def test_validation_workflows_cover_pr_main_manual_and_reuse() -> None:
+    for name in VALIDATION_WORKFLOWS:
         contents = workflow(name)
         assert "pull_request_target" not in contents
-        assert all(event in contents for event in EVENTS)
-        assert 'branches: ["**"]' in contents
-        assert '"v*"' in contents
+        for event in ("pull_request:", "push:", "workflow_dispatch:", "workflow_call:"):
+            assert event in contents
+        assert 'branches: ["main"]' in contents
+        assert "tags:" not in contents
 
 
 def test_workflows_have_read_only_permissions_and_immutable_action_pins() -> None:
-    for name in ("ci.yml", "hacs.yml", "hassfest.yml"):
+    for name in VALIDATION_WORKFLOWS:
         contents = workflow(name)
         assert "permissions:\n  contents: read" in contents
         assert "permissions: write" not in contents
@@ -34,6 +35,23 @@ def test_workflows_have_read_only_permissions_and_immutable_action_pins() -> Non
         )
         for uses_line in (line for line in contents.splitlines() if "uses:" in line):
             assert re.search(r"@[0-9a-f]{40}\s+#", uses_line), uses_line
+
+
+def test_release_workflow_publishes_version_tags_after_all_validation() -> None:
+    contents = workflow("release.yml")
+
+    assert "pull_request:" not in contents
+    assert "branches:" not in contents
+    assert 'tags: ["v*"]' in contents
+    assert "permissions:\n  contents: read" in contents
+    for name in VALIDATION_WORKFLOWS:
+        assert f"uses: ./.github/workflows/{name}" in contents
+    for uses_line in (line for line in contents.splitlines() if "- uses:" in line):
+        assert re.search(r"@[0-9a-f]{40}\s+#", uses_line), uses_line
+    assert "needs: [runtime, hacs, hassfest]" in contents
+    assert "contents: write" in contents
+    assert 'scripts/check_release_version.py --tag "$GITHUB_REF_NAME"' in contents
+    assert 'gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes' in contents
 
 
 def test_ci_runs_the_canonical_locked_runtime_and_version_gates() -> None:
