@@ -1,0 +1,34 @@
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.yaml
+
+# Home Assistant runtime
+.storage/
+deps/
+home-assistant.log*
+home-assistant_v2.db*
+
+# Generated BMad workflow snapshots
+_bmad/render/*
+!_bmad/render/.gitignore
