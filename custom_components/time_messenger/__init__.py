@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -32,6 +33,8 @@ from .pipeline import MessagePipeline
 from .runtime import TimeMessengerRuntime
 
 type TimeMessengerConfigEntry = ConfigEntry[TimeMessengerRuntime]
+
+PLATFORMS: list[Platform] = [Platform.EVENT]
 
 
 async def _async_token_provider(
@@ -122,7 +125,12 @@ async def async_setup_entry(
     )
     entry.runtime_data = runtime
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
-    await runtime.async_start()
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        await runtime.async_start()
+    except Exception:
+        await runtime.async_unload()
+        raise
     ir.async_delete_issue(hass, "time_messenger", f"unsupported_tenant_{entry.entry_id}")
     return True
 
@@ -132,11 +140,13 @@ async def _async_reload_entry(hass: HomeAssistant, entry: TimeMessengerConfigEnt
 
 
 async def async_unload_entry(
-    _hass: HomeAssistant,
+    hass: HomeAssistant,
     entry: TimeMessengerConfigEntry,
 ) -> bool:
     """Invalidate generation, wait for task, and close only local runtime resources."""
 
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
     await entry.runtime_data.async_unload()
     return True
 

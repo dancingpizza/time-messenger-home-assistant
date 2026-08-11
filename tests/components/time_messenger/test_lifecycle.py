@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError, ConfigEntryNotReady
 
 from custom_components.time_messenger import (
@@ -20,14 +21,46 @@ from custom_components.time_messenger.api.exceptions import (
 
 
 async def test_unload_only_stops_runtime() -> None:
+    calls: list[str] = []
+
+    async def unload_platforms(_entry: object, platforms: list[Platform]) -> bool:
+        assert platforms == [Platform.EVENT]
+        calls.append("unload_event")
+        return True
+
+    async def unload_runtime() -> None:
+        calls.append("runtime_unload")
+
+    runtime = SimpleNamespace(async_unload=AsyncMock(side_effect=unload_runtime))
+    entry = SimpleNamespace(runtime_data=runtime)
+    hass = SimpleNamespace(config_entries=SimpleNamespace(async_unload_platforms=unload_platforms))
+
+    assert await async_unload_entry(hass, entry) is True  # type: ignore[arg-type]
+    runtime.async_unload.assert_awaited_once()
+    assert calls == ["unload_event", "runtime_unload"]
+
+
+async def test_failed_platform_unload_keeps_runtime_active() -> None:
     runtime = SimpleNamespace(async_unload=AsyncMock())
     entry = SimpleNamespace(runtime_data=runtime)
-    assert await async_unload_entry(SimpleNamespace(), entry) is True  # type: ignore[arg-type]
-    runtime.async_unload.assert_awaited_once()
+    hass = SimpleNamespace(
+        config_entries=SimpleNamespace(async_unload_platforms=AsyncMock(return_value=False))
+    )
+
+    assert await async_unload_entry(hass, entry) is False  # type: ignore[arg-type]
+    runtime.async_unload.assert_not_awaited()
 
 
 async def test_setup_gates_identity_and_hello_before_starting_one_runtime() -> None:
-    hass = SimpleNamespace()
+    calls: list[str] = []
+
+    async def forward_platforms(_entry: object, platforms: list[Platform]) -> None:
+        assert platforms == [Platform.EVENT]
+        calls.append("forward_event")
+
+    hass = SimpleNamespace(
+        config_entries=SimpleNamespace(async_forward_entry_setups=forward_platforms)
+    )
     session = SimpleNamespace(detach=Mock(), close=AsyncMock())
     provider = SimpleNamespace()
     client = SimpleNamespace(
@@ -35,7 +68,11 @@ async def test_setup_gates_identity_and_hello_before_starting_one_runtime() -> N
         async_get_channel_type=AsyncMock(return_value="D"),
     )
     websocket = SimpleNamespace(async_probe_hello=AsyncMock(return_value="10.2"))
-    runtime = SimpleNamespace(async_start=AsyncMock())
+
+    async def start_runtime() -> None:
+        calls.append("runtime_start")
+
+    runtime = SimpleNamespace(async_start=AsyncMock(side_effect=start_runtime))
     entry = SimpleNamespace(
         entry_id="entry",
         data={
@@ -66,6 +103,7 @@ async def test_setup_gates_identity_and_hello_before_starting_one_runtime() -> N
     client.async_get_me.assert_awaited_once()
     websocket.async_probe_hello.assert_awaited_once()
     runtime.async_start.assert_awaited_once()
+    assert calls == ["forward_event", "runtime_start"]
     assert entry.runtime_data is runtime
     delete_issue.assert_called_once_with(hass, "time_messenger", "unsupported_tenant_entry")
 

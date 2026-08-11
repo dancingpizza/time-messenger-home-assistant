@@ -453,9 +453,16 @@ class FiniteSocket:
 
 async def test_async_listen_delivers_fixture_post_through_real_event_boundary() -> None:
     fired: list[tuple[str, dict[str, object]]] = []
-    hass = SimpleNamespace(
-        bus=SimpleNamespace(async_fire=lambda event, data: fired.append((event, data)))
-    )
+
+    class Hass:
+        def __init__(self) -> None:
+            self.bus = SimpleNamespace(async_fire=lambda event, data: fired.append((event, data)))
+            self.data: dict[str, object] = {}
+
+        def verify_event_loop_thread(self, _action: str) -> None:
+            pass
+
+    hass = Hass()
     publisher = HomeAssistantEventPublisher(
         hass,
         config_entry_id="entry",

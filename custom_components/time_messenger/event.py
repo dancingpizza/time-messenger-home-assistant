@@ -40,6 +40,7 @@ class TimeMessengerEventEntity(EventEntity):
     """Represent accepted direct messages as native Home Assistant events."""
 
     _attr_has_entity_name = True
+    _attr_suggested_object_id = "time_messenger_direct_message"
     _attr_translation_key = "direct_message"
 
     def __init__(self, entry: TimeMessengerConfigEntry) -> None:

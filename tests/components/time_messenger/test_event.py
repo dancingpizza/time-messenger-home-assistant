@@ -135,6 +135,7 @@ async def test_event_platform_exposes_account_event_entity_and_records_message()
     entity = entities[0]
     assert isinstance(entity, event_module.TimeMessengerEventEntity)
     assert entity.unique_id == "https://time.example|me_direct_message"
+    assert getattr(entity, "_attr_suggested_object_id", None) == "time_messenger_direct_message"
     assert entity.translation_key == "direct_message"
     assert entity.event_types == ["direct_message"]
     assert entity.device_info["entry_type"] is DeviceEntryType.SERVICE
