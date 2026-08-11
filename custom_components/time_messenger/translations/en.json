@@ -50,6 +50,18 @@
       }
     }
   },
+  "entity": {
+    "event": {
+      "direct_message": {
+        "name": "Direct message",
+        "state_attributes": {
+          "event_type": {
+            "state": {"direct_message": "Direct message received"}
+          }
+        }
+      }
+    }
+  },
   "issues": {
     "unsupported_tenant": {
       "description": "The Time tenant does not expose the required authenticated WebSocket capability.",
