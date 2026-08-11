@@ -3,9 +3,9 @@ name: Hassfest
 on:
   pull_request:
   push:
-    branches: ["**"]
-    tags: ["v*"]
+    branches: ["main"]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
