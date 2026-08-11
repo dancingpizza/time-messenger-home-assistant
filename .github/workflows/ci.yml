@@ -1,0 +1,24 @@
+name: Runtime CI
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@b75a909f75acd358c2196fb9a5f1299a92742213 # v6.0.1
+      - run: uv sync --frozen --all-groups
+      - run: uv run --frozen pytest -q
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen ruff format --check .
+      - run: uv run --frozen mypy custom_components/time_messenger
+      - run: uv run --frozen python scripts/check_release_version.py
