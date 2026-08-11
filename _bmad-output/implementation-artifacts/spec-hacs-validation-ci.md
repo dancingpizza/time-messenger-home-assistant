@@ -71,12 +71,14 @@ context:
   malformed/missing surfaces и tag contexts; checker и CI workflow contracts реализованы.
 - 2026-08-11: Pin provenance — `actions/checkout` v4.2.2 закреплён на
   `11bd71901bbe5b1630ceea73d27597364c9af683`; `astral-sh/setup-uv` v6.0.1 — на
-  `b75a909f75acd358c2196fb9a5f1299a92742213`; `hacs/action` 22.5.0 — на
+  `c771a70e6277c0a99b617c7a806ffedaca235ff9`; `hacs/action` 22.5.0 — на
   `d556e736723344f83838d08488c983a15381059a`; Hassfest — на проверенный snapshot
   `home-assistant/actions` master `a7c616ce81ccda50150bf1595786c71b1883fabb`.
 - 2026-08-11: External-gate evidence — live tenant probe и clean HACS install smoke
   не выполнялись и не объявляются успешными: они требуют tenant credentials и
   опубликованный GitHub Release соответственно.
+- 2026-08-11: Remote CI fix — initial Runtime CI обнаружил несуществующий setup-uv
+  SHA; pin заменён на официальный immutable `v9.0.0` до tag/release.
 - 2026-08-11: Review evidence — checker игнорирует `GITHUB_REF_NAME` вне tag
   context, требует ровно один project entry в `uv.lock` и возвращает named
   nonzero diagnostic для duplicate/unreadable release surfaces без traceback.
