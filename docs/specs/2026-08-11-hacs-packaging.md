@@ -22,7 +22,7 @@ Assistant должны останавливать изменение до пуб
 | `README.md` | HACS landing page и основная пользовательская документация; голос и структура — по [style-guide.md](../style-guide.md). |
 | `CHANGELOG.md` | Раздел на каждую версию с пользовательскими изменениями и ограничениями; пустые или generated commit dumps запрещены. |
 | `LICENSE` | Полный текст MIT License с корректным copyright holder/year. |
-| `custom_components/time_messenger/brand/icon.png` | Нейтральная HACS-compatible иконка без логотипов или товарных знаков Time/Т-Банка. |
+| `custom_components/time_messenger/brand/icon.png` | HACS-compatible квадратная PNG-иконка. ⚠️ Требование «без товарных знаков Time/Т-Банка» отменено начиная с `0.0.5` — см. [2026-08-13-brand-icon-refresh.md](2026-08-13-brand-icon-refresh.md). |
 | `.github/workflows/` | CI, HACS validation, Hassfest и version-parity gate. |
 
 Официальные основания: [HACS general publishing requirements](https://www.hacs.dev/docs/publish/start/),
