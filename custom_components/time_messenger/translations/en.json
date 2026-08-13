@@ -48,7 +48,7 @@
         },
         "data_description": {
           "auth_mode": "Ask your Time administrator which methods are enabled on the server.",
-          "tenant_origin": "The Time server address, e.g. https://time.example.org, with no path."
+          "tenant_origin": "The full HTTPS address of your Time server, with no path after the domain."
         },
         "description": "Connect one personal Time identity. The origin cannot be changed later.",
         "title": "Connect Time Messenger"

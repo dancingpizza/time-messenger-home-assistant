@@ -48,7 +48,7 @@
         },
         "data_description": {
           "auth_mode": "Уточните у администратора Time, какие способы включены на сервере.",
-          "tenant_origin": "Адрес сервера Time, например https://time.example.org, без пути."
+          "tenant_origin": "Полный HTTPS-адрес вашего сервера Time, без пути после домена."
         },
         "description": "Подключите одну личную identity Time. Origin нельзя изменить позднее.",
         "title": "Подключение Time Messenger"
