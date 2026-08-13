@@ -46,6 +46,9 @@ uv run python scripts/check_release_version.py
   которые пишет установленный плагин-скилл `superpowers` при
   spec-driven разработке фичи. Это его namespace; не переноси туда контент
   вручную и не переименовывай — просто оставляй как есть.
+- [`docs/index.html`](docs/index.html) — лендинг GitHub Pages
+  (https://dancingpizza.github.io/time-messenger-home-assistant/), статический
+  HTML без сборки. Не генерируется автоматически из README.
 
 Раньше в репозитории был BMAD (`_bmad/`, `_bmad-output/`,
 `.agents/skills/bmad-*`) — полный planning framework с собственными
@@ -70,6 +73,11 @@ uv run python scripts/check_release_version.py
 - **Версии синхронны.** `custom_components/time_messenger/manifest.json`,
   `pyproject.toml` и заголовок в `CHANGELOG.md` должны содержать одну и ту
   же версию — это проверяет `scripts/check_release_version.py`.
+- **`docs/index.html` синхронизирован с README.** Это отдельный статический
+  лендинг для GitHub Pages, не рендерится из README автоматически. Если
+  правишь описание, возможности, ссылки на установку или примеры
+  автоматизаций в README.md — перенеси то же изменение в `docs/index.html`
+  в том же коммите.
 
 ## Релиз
 

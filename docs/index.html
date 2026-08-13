@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time Messenger для Home Assistant</title>
+<meta name="description" content="Кастомная интеграция Home Assistant (HACS) для Time Messenger (также известна как Syncer): личные сообщения приходят по WebSocket в реальном времени и становятся событиями Home Assistant для автоматизаций и уведомлений.">
+<meta name="keywords" content="Time Messenger, Syncer, Home Assistant, HACS, custom integration, умный дом, автоматизация, WebSocket, личные сообщения">
+<link rel="canonical" href="https://dancingpizza.github.io/time-messenger-home-assistant/">
+<link rel="icon" href="icon.png" type="image/png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Time Messenger для Home Assistant">
+<meta property="og:description" content="Личные сообщения Time Messenger (Syncer) как события Home Assistant — в реальном времени, без опроса.">
+<meta property="og:image" content="https://dancingpizza.github.io/time-messenger-home-assistant/icon.png">
+<meta property="og:url" content="https://dancingpizza.github.io/time-messenger-home-assistant/">
+<meta name="twitter:card" content="summary">
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --bg-elevated: #ffffff;
+    --text: #1b2430;
+    --text-muted: #566072;
+    --accent: #1c94c4;
+    --accent-strong: #0f6f96;
+    --accent-contrast: #ffffff;
+    --border: #dde3ea;
+    --shadow: 0 1px 2px rgba(20, 30, 45, 0.06), 0 8px 24px rgba(20, 30, 45, 0.06);
+    --code-bg: #0f1720;
+    --code-text: #d8e2ee;
+    --code-keyword: #6bc6ff;
+    --code-string: #9fe0a8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10161f;
+      --bg-elevated: #171f2b;
+      --text: #e7ecf3;
+      --text-muted: #9aa7b8;
+      --accent: #41bdf5;
+      --accent-strong: #7cd3ff;
+      --accent-contrast: #0b1520;
+      --border: #29323f;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+      --code-bg: #0b1119;
+      --code-text: #d8e2ee;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  a { color: var(--accent-strong); }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+  header.hero {
+    padding: 64px 0 48px;
+    border-bottom: 1px solid var(--border);
+  }
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+  .hero-top {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+  .hero-top img {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    flex: none;
+  }
+  h1 {
+    font-size: 34px;
+    line-height: 1.2;
+    margin: 0;
+  }
+  .alt-name {
+    color: var(--text-muted);
+    font-size: 15px;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+  .lede {
+    font-size: 18px;
+    color: var(--text-muted);
+    max-width: 62ch;
+    margin: 18px 0 28px;
+  }
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    border: 1px solid transparent;
+  }
+  .btn.primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .btn.secondary {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  section {
+    padding: 44px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  section:last-of-type { border-bottom: none; }
+  h2 {
+    font-size: 22px;
+    margin: 0 0 18px;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .card h3 {
+    font-size: 16px;
+    margin: 0 0 8px;
+  }
+  .card p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 14.5px;
+  }
+  ol.steps {
+    padding-left: 20px;
+    color: var(--text);
+  }
+  ol.steps li {
+    margin-bottom: 10px;
+  }
+  ol.steps code, p code, li code {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 0.9em;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 18px;
+    border-radius: 12px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    box-shadow: var(--shadow);
+  }
+  pre code { background: none; border: none; padding: 0; }
+  .limits {
+    color: var(--text-muted);
+  }
+  .limits li { margin-bottom: 6px; }
+  footer {
+    padding: 32px 0 56px;
+    color: var(--text-muted);
+    font-size: 13.5px;
+  }
+  footer a { color: var(--text-muted); text-decoration: underline; }
+  footer .foot-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="badges">
+    <a class="badge" href="https://github.com/hacs/integration">HACS Custom</a>
+    <a class="badge" href="https://github.com/dancingpizza/time-messenger-home-assistant/blob/main/LICENSE">MIT License</a>
+    <a class="badge" href="https://github.com/dancingpizza/time-messenger-home-assistant/releases">v0.0.4</a>
+  </div>
+  <div class="hero-top">
+    <img src="icon.png" alt="Иконка Time Messenger" width="56" height="56">
+    <div>
+      <h1>Time Messenger для Home Assistant</h1>
+      <div class="alt-name">Также известна как Syncer — альтернативное название того же мессенджера</div>
+    </div>
+  </div>
+  <p class="lede">
+    Пришло личное сообщение в Time Messenger. Через пару секунд на кухне
+    моргнула лампа, а на телефон прилетел пуш. Интеграция превращает ваши
+    личные сообщения в обычные события Home Assistant, из которых можно
+    собрать любую автоматизацию.
+  </p>
+  <div class="cta-row">
+    <a class="btn primary" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=dancingpizza&amp;repository=time-messenger-home-assistant&amp;category=integration">Установить через HACS</a>
+    <a class="btn secondary" href="https://github.com/dancingpizza/time-messenger-home-assistant">Репозиторий на GitHub</a>
+  </div>
+</header>
+
+<section>
+  <h2>Что делает интеграция</h2>
+  <p>
+    Вы подключаете свою личную учётную запись Time Messenger, и как только
+    кому-то приходит в голову написать вам напрямую, Home Assistant узнаёт
+    об этом сразу: сообщение приходит по WebSocket, без периодического
+    опроса. Дальше вы решаете, что с этим делать — включить свет, сказать
+    вслух через колонку, отправить уведомление на телефон или что угодно
+    ещё, на что способны ваши автоматизации.
+  </p>
+</section>
+
+<section>
+  <h2>Возможности</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Реальное время</h3>
+      <p>Новые личные сообщения приходят по WebSocket сразу, без опроса и задержек.</p>
+    </div>
+    <div class="card">
+      <h3>Нативная сущность события</h3>
+      <p>«Личное сообщение» выбирается прямо в визуальном редакторе автоматизаций, без ручного YAML.</p>
+    </div>
+    <div class="card">
+      <h3>Приватность по умолчанию</h3>
+      <p>Текст сообщения скрыт, пока вы явно не включите его в настройках интеграции.</p>
+    </div>
+    <div class="card">
+      <h3>Без дублей</h3>
+      <p>Одно и то же сообщение не прилетит дважды, даже после переподключения или перезапуска Home Assistant.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Быстрый старт</h2>
+  <ol class="steps">
+    <li>Откройте <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=dancingpizza&amp;repository=time-messenger-home-assistant&amp;category=integration">Time Messenger в HACS</a>.</li>
+    <li>Установите интеграцию и перезапустите Home Assistant.</li>
+    <li>Перейдите в <code>Settings → Devices &amp; services → Add integration</code>.</li>
+    <li>Найдите Time Messenger и следуйте подсказкам на экране.</li>
+  </ol>
+  <p>
+    Полная инструкция по установке без HACS, способам входа (OAuth,
+    персональный токен, логин и пароль) и настройке приватности — в
+    <a href="https://github.com/dancingpizza/time-messenger-home-assistant#-установка">README репозитория</a>.
+  </p>
+</section>
+
+<section>
+  <h2>Пример автоматизации</h2>
+  <p>Событие приходит от сущности «Личное сообщение» и запускает любое действие Home Assistant:</p>
+  <pre><code>alias: Time Messenger, новое личное сообщение
+triggers:
+  - trigger: event.received
+    target:
+      entity_id: event.time_messenger_direct_message
+    options:
+      event_type:
+        - direct_message
+actions:
+  - action: persistent_notification.create
+    data:
+      title: Time Messenger
+      message: >-
+        {{ trigger.to_state.attributes.message_text
+           or ('Новое сообщение от '
+               ~ (trigger.to_state.attributes.sender_username
+                  | default(trigger.to_state.attributes.sender_user_id, true))) }}
+mode: queued</code></pre>
+  <p>Больше рецептов, включая озвучку через Алису, — в README.</p>
+</section>
+
+<section>
+  <h2>Чего пока нет</h2>
+  <ul class="limits">
+    <li>Групповые чаты — интеграция видит только личные сообщения один на один.</li>
+    <li>Сообщения из времени, когда Home Assistant был выключен, не восстанавливаются задним числом.</li>
+  </ul>
+</section>
+
+<footer>
+  <div class="foot-links">
+    <a href="https://github.com/dancingpizza/time-messenger-home-assistant">GitHub</a>
+    <a href="https://github.com/dancingpizza/time-messenger-home-assistant/issues">Issues</a>
+    <a href="https://github.com/dancingpizza/time-messenger-home-assistant/blob/main/LICENSE">MIT License</a>
+    <a href="https://github.com/dancingpizza/time-messenger-home-assistant/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+  <div>Неофициальная интеграция, не связана с Time Messenger / Syncer напрямую.</div>
+</footer>
+
+</div>
+</body>
+</html>
