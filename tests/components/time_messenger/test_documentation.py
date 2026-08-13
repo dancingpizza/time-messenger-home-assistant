@@ -26,7 +26,7 @@ def test_readme_native_and_compatibility_examples_are_parseable() -> None:
     """Catch malformed YAML or examples wired to the wrong event interfaces."""
     markdown = readme()
     recipes = fenced_blocks(markdown, "yaml")
-    assert len(recipes) == 2
+    assert len(recipes) == 3
 
     native = yaml.safe_load(recipes[0])
     assert isinstance(native, dict)
@@ -37,7 +37,17 @@ def test_readme_native_and_compatibility_examples_are_parseable() -> None:
     }
     assert native["actions"][0]["action"] == "persistent_notification.create"
 
-    compatibility = yaml.safe_load(recipes[1])
+    alice = yaml.safe_load(recipes[1])
+    assert isinstance(alice, dict)
+    assert alice["triggers"][0] == {
+        "trigger": "event.received",
+        "target": {"entity_id": "event.time_messenger_direct_message"},
+        "options": {"event_type": ["direct_message"]},
+    }
+    assert alice["actions"][-1]["action"] == "media_player.play_media"
+    assert alice["actions"][-1]["data"]["media_content_type"] == "text"
+
+    compatibility = yaml.safe_load(recipes[2])
     assert isinstance(compatibility, dict)
     assert compatibility["triggers"][0]["event_type"] == "time_messenger_event"
 

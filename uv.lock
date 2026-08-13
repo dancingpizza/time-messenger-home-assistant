@@ -2057,7 +2057,7 @@ wheels = [
 
 [[package]]
 name = "time-messenger-home-assistant"
-version = "0.0.3"
+version = "0.0.4"
 source = { virtual = "." }
 dependencies = [
     { name = "homeassistant" },
