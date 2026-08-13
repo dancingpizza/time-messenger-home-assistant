@@ -5,6 +5,7 @@
       "cannot_connect": "Не удалось проверить tenant Time.",
       "identity_mismatch": "Авторизованная учётная запись Time не соответствует записи.",
       "invalid_origin": "Некорректный origin tenant.",
+      "oauth_not_configured": "Для этого origin ещё не добавлены OAuth application credentials. Добавьте их в Settings > Devices & services > Application Credentials, затем попробуйте снова.",
       "reauth_successful": "Авторизация обновлена.",
       "unsupported": "Этот способ авторизации не включён на tenant.",
       "unsupported_auth_mode": "Выбранный способ авторизации не поддерживается."
@@ -14,12 +15,16 @@
       "identity_mismatch": "Identity из login и users/me не совпадают.",
       "invalid_auth": "Time отклонил учётные данные.",
       "invalid_origin": "Укажите HTTPS origin tenant без пути.",
+      "oauth_not_configured": "Для этого origin ещё не добавлены OAuth application credentials. Добавьте их в Settings > Devices & services > Application Credentials или выберите другой способ авторизации ниже.",
       "unsupported": "Этот способ авторизации отключён на tenant."
     },
     "step": {
       "pat": {
         "data": {"token": "Персональный токен доступа"},
-        "description": "Введите PAT своей личной учётной записи Time.",
+        "data_description": {
+          "token": "Создайте PAT в личных настройках Time и вставьте его целиком."
+        },
+        "description": "Введите PAT своей личной учётной записи Time для {tenant_origin}.",
         "title": "Персональный токен"
       },
       "session": {
@@ -28,13 +33,22 @@
           "password": "Пароль",
           "username": "Логин"
         },
-        "description": "Пароль и MFA отправляются один раз и никогда не сохраняются.",
+        "data_description": {
+          "mfa_code": "Заполните, только если для аккаунта включена двухфакторная аутентификация.",
+          "password": "Отправляется один раз и никогда не сохраняется.",
+          "username": "Логин или email вашей личной учётной записи Time."
+        },
+        "description": "Вход выполняется для {tenant_origin}. Пароль и MFA отправляются один раз и никогда не сохраняются.",
         "title": "Вход в сессию"
       },
       "user": {
         "data": {
           "auth_mode": "Способ авторизации",
           "tenant_origin": "Origin tenant"
+        },
+        "data_description": {
+          "auth_mode": "Уточните у администратора Time, какие способы включены на сервере.",
+          "tenant_origin": "Адрес сервера Time, например https://time.example.org, без пути."
         },
         "description": "Подключите одну личную identity Time. Origin нельзя изменить позднее.",
         "title": "Подключение Time Messenger"
@@ -66,6 +80,15 @@
     "unsupported_tenant": {
       "description": "Tenant Time не предоставляет необходимый авторизованный WebSocket.",
       "title": "Возможности tenant Time не поддерживаются"
+    }
+  },
+  "selector": {
+    "auth_mode": {
+      "options": {
+        "oauth": "OAuth",
+        "pat": "Персональный токен доступа",
+        "session": "Логин и пароль"
+      }
     }
   }
 }

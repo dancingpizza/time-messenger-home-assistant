@@ -5,6 +5,7 @@
       "cannot_connect": "Could not validate the Time tenant.",
       "identity_mismatch": "The authenticated Time identity does not match this entry.",
       "invalid_origin": "The tenant origin is invalid.",
+      "oauth_not_configured": "No OAuth application credentials are set up for this origin yet. Add them under Settings > Devices & services > Application Credentials, then try again.",
       "reauth_successful": "Authentication was updated.",
       "unsupported": "This authentication method is not enabled on the tenant.",
       "unsupported_auth_mode": "The selected authentication mode is not supported."
@@ -14,12 +15,16 @@
       "identity_mismatch": "The login response and users/me identity do not match.",
       "invalid_auth": "Time rejected these credentials.",
       "invalid_origin": "Use an HTTPS tenant origin without a path.",
+      "oauth_not_configured": "No OAuth application credentials are set up for this origin yet. Add them under Settings > Devices & services > Application Credentials, or pick a different authentication method below.",
       "unsupported": "This authentication method is disabled on the tenant."
     },
     "step": {
       "pat": {
         "data": {"token": "Personal access token"},
-        "description": "Enter a PAT created for your personal Time account.",
+        "data_description": {
+          "token": "Create a PAT in your personal Time settings and paste it in full."
+        },
+        "description": "Enter a PAT created for your personal Time account on {tenant_origin}.",
         "title": "Personal access token"
       },
       "session": {
@@ -28,13 +33,22 @@
           "password": "Password",
           "username": "Login"
         },
-        "description": "The password and MFA code are sent once and are never stored.",
+        "data_description": {
+          "mfa_code": "Only needed if two-factor authentication is enabled for the account.",
+          "password": "Sent once and never stored.",
+          "username": "The login or email of your personal Time account."
+        },
+        "description": "Signing in to {tenant_origin}. The password and MFA code are sent once and are never stored.",
         "title": "Session login"
       },
       "user": {
         "data": {
           "auth_mode": "Authentication method",
           "tenant_origin": "Tenant origin"
+        },
+        "data_description": {
+          "auth_mode": "Ask your Time administrator which methods are enabled on the server.",
+          "tenant_origin": "The Time server address, e.g. https://time.example.org, with no path."
         },
         "description": "Connect one personal Time identity. The origin cannot be changed later.",
         "title": "Connect Time Messenger"
@@ -66,6 +80,15 @@
     "unsupported_tenant": {
       "description": "The Time tenant does not expose the required authenticated WebSocket capability.",
       "title": "Time tenant capability is unsupported"
+    }
+  },
+  "selector": {
+    "auth_mode": {
+      "options": {
+        "oauth": "OAuth",
+        "pat": "Personal access token",
+        "session": "Login and password"
+      }
     }
   }
 }

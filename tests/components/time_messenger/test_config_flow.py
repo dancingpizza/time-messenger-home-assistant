@@ -48,6 +48,44 @@ async def test_three_auth_modes_are_explicit_and_never_fallback(mode: str, metho
         assert flow.flow_impl is oauth_impl
 
 
+async def test_oauth_without_credentials_reshows_user_form_with_error() -> None:
+    flow = TimeMessengerConfigFlow()
+    flow.hass = SimpleNamespace()  # type: ignore[assignment]
+    with patch(
+        "custom_components.time_messenger.config_flow.config_entry_oauth2_flow.async_get_implementations",
+        AsyncMock(return_value={}),
+    ):
+        result = await flow.async_step_user(
+            {CONF_TENANT_ORIGIN: "https://time.example", CONF_AUTH_MODE: AUTH_MODE_OAUTH}
+        )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "oauth_not_configured"}
+    # The origin and mode the user just entered are kept, not discarded, so
+    # the re-shown form can default to them instead of starting from blank.
+    assert flow._origin == "https://time.example"
+    assert flow._mode == AUTH_MODE_OAUTH
+    assert result["data_schema"]({}) == {
+        CONF_TENANT_ORIGIN: "https://time.example",
+        CONF_AUTH_MODE: AUTH_MODE_OAUTH,
+    }
+
+
+async def test_oauth_without_credentials_aborts_during_reauth() -> None:
+    flow = TimeMessengerConfigFlow()
+    flow.hass = SimpleNamespace()  # type: ignore[assignment]
+    flow._mode = AUTH_MODE_OAUTH
+    flow._origin = "https://time.example"
+    flow._reauth_entry = SimpleNamespace(entry_id="entry")  # type: ignore[assignment]
+    with patch(
+        "custom_components.time_messenger.config_flow.config_entry_oauth2_flow.async_get_implementations",
+        AsyncMock(return_value={}),
+    ):
+        result = await flow._async_next_auth_step()
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "oauth_not_configured"
+
+
 async def test_reauth_uses_existing_mode_and_origin() -> None:
     flow = TimeMessengerConfigFlow()
     entry = SimpleNamespace(entry_id="entry")

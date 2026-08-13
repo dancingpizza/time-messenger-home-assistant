@@ -11,6 +11,14 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    SelectOptionDict,
+    SelectSelector,
+    SelectSelectorConfig,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .api.auth import StaticTokenProvider, token_from_oauth_data
 from .api.client import TimeApiClient, normalize_tenant_origin
@@ -30,6 +38,15 @@ from .const import (
 )
 
 CONF_MFA_CODE = "mfa_code"
+
+# English fallback labels for the auth mode select. The frontend prefers the
+# translated `selector.auth_mode.options.*` string and only falls back to
+# these when a translation is missing.
+_AUTH_MODE_LABELS: dict[str, str] = {
+    AUTH_MODE_OAUTH: "OAuth",
+    AUTH_MODE_PAT: "Personal access token",
+    AUTH_MODE_SESSION: "Login and password",
+}
 
 
 class TimeMessengerConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
@@ -57,14 +74,48 @@ class TimeMessengerConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler
                 errors[CONF_TENANT_ORIGIN] = "invalid_origin"
             else:
                 self._mode = user_input[CONF_AUTH_MODE]
-                return await self._async_next_auth_step()
-        schema = vol.Schema(
+                next_step = await self._async_next_auth_step()
+                if next_step is not None:
+                    return next_step
+                # OAuth was picked but no application credentials are
+                # registered for this origin yet. Re-show this step instead
+                # of aborting so the origin and mode the user just entered
+                # are not lost; they can add credentials or pick another
+                # auth mode without retyping the origin.
+                errors["base"] = "oauth_not_configured"
+        return self.async_show_form(
+            step_id="user", data_schema=self._user_data_schema(), errors=errors
+        )
+
+    def _user_data_schema(self) -> vol.Schema:
+        """Build the tenant/auth-mode schema, keeping any prior input as default."""
+
+        origin_marker = (
+            vol.Required(CONF_TENANT_ORIGIN, default=self._origin)
+            if self._origin is not None
+            else vol.Required(CONF_TENANT_ORIGIN)
+        )
+        mode_marker = (
+            vol.Required(CONF_AUTH_MODE, default=self._mode)
+            if self._mode is not None
+            else vol.Required(CONF_AUTH_MODE)
+        )
+        return vol.Schema(
             {
-                vol.Required(CONF_TENANT_ORIGIN): str,
-                vol.Required(CONF_AUTH_MODE): vol.In(AUTH_MODES),
+                origin_marker: TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.URL, autocomplete="url")
+                ),
+                mode_marker: SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=mode, label=_AUTH_MODE_LABELS[mode])
+                            for mode in AUTH_MODES
+                        ],
+                        translation_key=CONF_AUTH_MODE,
+                    )
+                ),
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     async def _async_next_auth_step(self) -> Any:
         if self._mode == AUTH_MODE_PAT:
@@ -78,12 +129,19 @@ class TimeMessengerConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler
             )
             implementation = implementations.get(self._origin)
             if implementation is None:
-                return self.async_abort(reason="unsupported")
+                # Reauth has no form of its own to fall back to (mode and
+                # origin come from the existing entry, not user input), so
+                # it aborts. A fresh flow returns None and lets
+                # async_step_user re-show itself with an inline error.
+                if self._reauth_entry is not None:
+                    return self.async_abort(reason="oauth_not_configured")
+                return None
             self.flow_impl = implementation
             return await self.async_step_auth()
         return self.async_abort(reason="unsupported_auth_mode")
 
     async def async_step_pat(self, user_input: dict[str, Any] | None = None) -> Any:
+        assert self._origin is not None
         errors: dict[str, str] = {}
         if user_input is not None:
             token = user_input[CONF_TOKEN]
@@ -98,14 +156,21 @@ class TimeMessengerConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler
                 )
         return self.async_show_form(
             step_id="pat",
-            data_schema=vol.Schema({vol.Required(CONF_TOKEN): str}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_TOKEN): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    )
+                }
+            ),
             errors=errors,
+            description_placeholders={"tenant_origin": self._origin},
         )
 
     async def async_step_session(self, user_input: dict[str, Any] | None = None) -> Any:
+        assert self._origin is not None
         errors: dict[str, str] = {}
         if user_input is not None:
-            assert self._origin is not None
             session = async_get_clientsession(self.hass)
             login_client = TimeApiClient(session, self._origin, None)
             token: str | None = None
@@ -146,12 +211,21 @@ class TimeMessengerConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler
             step_id="session",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_USERNAME): str,
-                    vol.Required(CONF_PASSWORD): str,
-                    vol.Optional(CONF_MFA_CODE): str,
+                    vol.Required(CONF_USERNAME): TextSelector(
+                        TextSelectorConfig(autocomplete="username")
+                    ),
+                    vol.Required(CONF_PASSWORD): TextSelector(
+                        TextSelectorConfig(
+                            type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                        )
+                    ),
+                    vol.Optional(CONF_MFA_CODE): TextSelector(
+                        TextSelectorConfig(autocomplete="one-time-code")
+                    ),
                 }
             ),
             errors=errors,
+            description_placeholders={"tenant_origin": self._origin},
         )
 
     async def async_oauth_create_entry(self, data: dict[str, Any]) -> Any:
