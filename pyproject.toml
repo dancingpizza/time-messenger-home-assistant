@@ -24,7 +24,6 @@ filterwarnings = [
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-extend-exclude = [".agents", "_bmad", "_bmad-output"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]

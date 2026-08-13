@@ -28,7 +28,3 @@ secrets.yaml
 deps/
 home-assistant.log*
 home-assistant_v2.db*
-
-# Generated BMad workflow snapshots
-_bmad/render/*
-!_bmad/render/.gitignore
