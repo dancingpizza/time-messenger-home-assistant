@@ -26,6 +26,7 @@ from .exceptions import (
     AuthError,
     ProtocolError,
     RateLimitError,
+    TimeMessengerError,
     TransientError,
     UnsupportedCapability,
 )
@@ -182,10 +183,10 @@ class TimeWebSocketClient:
             async with asyncio.timeout(self._auth_timeout):
                 try:
                     token = await self._token_provider.async_get_token()
-                except AuthError:
+                except TimeMessengerError:
                     raise
                 except Exception as err:
-                    raise AuthError("WebSocket token provider failed") from err
+                    raise TransientError("WebSocket token provider failed") from err
                 await socket.send_json(
                     {
                         "seq": 1,
@@ -216,7 +217,7 @@ class TimeWebSocketClient:
                             self.server_version = data["server_version"]
         except TimeoutError as err:
             raise TransientError("WebSocket authentication timed out") from err
-        except AuthError, TransientError:
+        except TimeMessengerError:
             raise
         except ClientError as err:
             raise TransientError("WebSocket authentication failed") from err

@@ -19,6 +19,10 @@
       "unsupported": "This authentication method is disabled on the tenant."
     },
     "step": {
+      "oauth_credentials": {
+        "description": "OAuth application credentials are no longer available for {tenant_origin}. Add them under Settings > Devices & services > Application Credentials, then return here and select Submit.",
+        "title": "OAuth application credentials required"
+      },
       "pat": {
         "data": {"token": "Personal access token"},
         "data_description": {
@@ -56,11 +60,30 @@
     }
   },
   "options": {
+    "error": {
+      "invalid_interval": "Enter a whole number of minutes within the allowed range.",
+      "invalid_schedule": "Select at least one weekday and use different start and end times."
+    },
     "step": {
       "init": {
-        "data": {"include_message_text": "Include message text in Home Assistant events"},
-        "description": "Message text is redacted by default. Enabling this can expose content to automations and event listeners.",
-        "title": "Privacy"
+        "data": {
+          "include_message_text": "Include message text in Home Assistant events",
+          "keep_online": "Keep Time status online (experimental)",
+          "keep_online_end_time": "End time",
+          "keep_online_interval_minutes": "Online status refresh interval",
+          "keep_online_start_time": "Start time",
+          "keep_online_weekdays": "Active weekdays"
+        },
+        "data_description": {
+          "include_message_text": "Message text is redacted by default. Enabling this can expose content to automations and event listeners.",
+          "keep_online": "Experimental. Inside the selected Home Assistant-local schedule, periodically uses Time's direct status API to set this account online. This may reset a manually selected Do Not Disturb, away, or offline status and can change when notifications are delivered. Outside the schedule it makes no status PUT request and does not force the account offline.",
+          "keep_online_end_time": "End of the active window in Home Assistant local time. An end earlier than the start creates an overnight window.",
+          "keep_online_interval_minutes": "Used only when the experimental online keeper is enabled and inside its schedule. Keep the interval safely below the tenant's away timeout. Four minutes leaves a margin below the common five-minute timeout.",
+          "keep_online_start_time": "Start of the active window in Home Assistant local time.",
+          "keep_online_weekdays": "Select at least one day. For an overnight window, the selected weekday is the day on which the window starts."
+        },
+        "description": "Control event privacy and optional experimental Time presence handling. Schedule fields remain visible while the online keeper is disabled so they can be prepared before enabling it.",
+        "title": "Time Messenger options"
       }
     }
   },
@@ -77,6 +100,10 @@
     }
   },
   "issues": {
+    "keep_online_unavailable": {
+      "description": "The optional online keeper stopped because its schedule is invalid or the Time tenant rejected or did not confirm a status update. Message delivery and authentication health checks continue. Open Configure for this integration to review the schedule or disable the feature; if the settings are valid, ask the administrator about status API access.",
+      "title": "Could not keep the account online"
+    },
     "unsupported_tenant": {
       "description": "The Time tenant does not expose the required authenticated WebSocket capability.",
       "title": "Time tenant capability is unsupported"
@@ -88,6 +115,17 @@
         "oauth": "OAuth",
         "pat": "Personal access token",
         "session": "Login and password"
+      }
+    },
+    "keep_online_weekdays": {
+      "options": {
+        "fri": "Friday",
+        "mon": "Monday",
+        "sat": "Saturday",
+        "sun": "Sunday",
+        "thu": "Thursday",
+        "tue": "Tuesday",
+        "wed": "Wednesday"
       }
     }
   }

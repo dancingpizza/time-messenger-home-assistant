@@ -220,7 +220,7 @@
   <div class="badges">
     <a class="badge" href="https://github.com/hacs/integration">HACS Custom</a>
     <a class="badge" href="https://github.com/dancingpizza/time-messenger-home-assistant/blob/main/LICENSE">MIT License</a>
-    <a class="badge" href="https://github.com/dancingpizza/time-messenger-home-assistant/releases">v0.0.4</a>
+    <a class="badge" href="https://github.com/dancingpizza/time-messenger-home-assistant/releases">v0.0.6</a>
   </div>
   <div class="hero-top">
     <img src="icon.png" alt="Иконка Time Messenger" width="56" height="56">
@@ -272,7 +272,35 @@
       <h3>Без дублей</h3>
       <p>Одно и то же сообщение не прилетит дважды, даже после переподключения или перезапуска Home Assistant.</p>
     </div>
+    <div class="card">
+      <h3>Проверка авторизации</h3>
+      <p>Примерно раз в 15 минут интеграция проверяет авторизацию. Если токен истёк или был отозван, карточка интеграции станет красной, а Home Assistant покажет в настройках действие «Повторно авторизоваться».</p>
+    </div>
+    <div class="card">
+      <h3>«В сети» по расписанию</h3>
+      <p>Необязательный экспериментальный режим поддерживает online только в выбранные дни и часы.</p>
+    </div>
   </div>
+</section>
+
+<section>
+  <h2>Статус «В сети» по расписанию</h2>
+  <p>
+    В настройках интеграции можно выбрать дни недели, время начала и окончания
+    и интервал обновления. По умолчанию подготовлено расписание Пн–Пт,
+    09:00–18:00, раз в 4 минуты; функция выключена, пока вы сами её не включите.
+  </p>
+  <p>
+    Внутри окна интеграция использует прямой API статуса Time — она не создаёт
+    и не удаляет сообщения. Вне окна status-запросы не выполняются и аккаунт
+    не переводится в offline принудительно. Поддерживаются ночные окна, а время
+    берётся из часового пояса Home Assistant.
+  </p>
+  <p>
+    Это экспериментальная возможность: Time не обещает постоянный heartbeat,
+    а установка online может сбросить DND, «Отошёл» или «Не в сети» и повлиять
+    на мобильные уведомления. Поведение нужно проверить на вашем сервере.
+  </p>
 </section>
 
 <section>

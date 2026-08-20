@@ -6,18 +6,24 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME, UnitOfTime
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
+    TimeSelector,
 )
 
 from .api.auth import StaticTokenProvider, token_from_oauth_data
@@ -31,10 +37,23 @@ from .const import (
     AUTH_MODES,
     CONF_AUTH_MODE,
     CONF_INCLUDE_MESSAGE_TEXT,
+    CONF_KEEP_ONLINE,
+    CONF_KEEP_ONLINE_END_TIME,
+    CONF_KEEP_ONLINE_INTERVAL_MINUTES,
+    CONF_KEEP_ONLINE_START_TIME,
+    CONF_KEEP_ONLINE_WEEKDAYS,
     CONF_SERVER_VERSION,
     CONF_TENANT_ORIGIN,
     CONF_USER_ID,
+    DEFAULT_KEEP_ONLINE,
+    DEFAULT_KEEP_ONLINE_END_TIME,
+    DEFAULT_KEEP_ONLINE_INTERVAL_MINUTES,
+    DEFAULT_KEEP_ONLINE_START_TIME,
+    DEFAULT_KEEP_ONLINE_WEEKDAYS,
     DOMAIN,
+    KEEP_ONLINE_WEEKDAYS,
+    MAX_KEEP_ONLINE_INTERVAL_MINUTES,
+    MIN_KEEP_ONLINE_INTERVAL_MINUTES,
 )
 
 CONF_MFA_CODE = "mfa_code"
@@ -129,16 +148,39 @@ class TimeMessengerConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler
             )
             implementation = implementations.get(self._origin)
             if implementation is None:
-                # Reauth has no form of its own to fall back to (mode and
-                # origin come from the existing entry, not user input), so
-                # it aborts. A fresh flow returns None and lets
-                # async_step_user re-show itself with an inline error.
                 if self._reauth_entry is not None:
-                    return self.async_abort(reason="oauth_not_configured")
+                    # Keep reauth pending so HA can retain its Repairs action
+                    # while the user restores Application Credentials.
+                    return self._show_oauth_credentials_form()
                 return None
             self.flow_impl = implementation
             return await self.async_step_auth()
         return self.async_abort(reason="unsupported_auth_mode")
+
+    async def async_step_oauth_credentials(self, user_input: dict[str, Any] | None = None) -> Any:
+        """Wait for removed OAuth Application Credentials to be restored."""
+
+        assert self._origin is not None
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            implementations = await config_entry_oauth2_flow.async_get_implementations(
+                self.hass, DOMAIN
+            )
+            implementation = implementations.get(self._origin)
+            if implementation is not None:
+                self.flow_impl = implementation
+                return await self.async_step_auth()
+            errors["base"] = "oauth_not_configured"
+        return self._show_oauth_credentials_form(errors)
+
+    def _show_oauth_credentials_form(self, errors: dict[str, str] | None = None) -> Any:
+        assert self._origin is not None
+        return self.async_show_form(
+            step_id="oauth_credentials",
+            data_schema=vol.Schema({}),
+            errors=errors,
+            description_placeholders={"tenant_origin": self._origin},
+        )
 
     async def async_step_pat(self, user_input: dict[str, Any] | None = None) -> Any:
         assert self._origin is not None
@@ -320,23 +362,93 @@ class TimeMessengerConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler
         return TimeMessengerOptionsFlow(config_entry)
 
 
-class TimeMessengerOptionsFlow(config_entries.OptionsFlow):
-    """Privacy-only options; origin and identity are immutable here."""
+class TimeMessengerOptionsFlow(config_entries.OptionsFlowWithReload):
+    """Runtime options; origin and identity are immutable here."""
 
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         self._entry = entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> Any:
+        errors: dict[str, str] = {}
+        values: dict[str, Any] = dict(self._entry.options)
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            values = dict(user_input)
+            start_time = cv.time(values[CONF_KEEP_ONLINE_START_TIME])
+            end_time = cv.time(values[CONF_KEEP_ONLINE_END_TIME])
+            raw_interval = values[CONF_KEEP_ONLINE_INTERVAL_MINUTES]
+            interval = float(raw_interval)
+            # TimeSelector normally returns strings, but normalizing here also
+            # keeps direct/programmatic submissions JSON-safe for ConfigEntry.
+            values[CONF_KEEP_ONLINE_START_TIME] = start_time.isoformat()
+            values[CONF_KEEP_ONLINE_END_TIME] = end_time.isoformat()
+            if (
+                isinstance(raw_interval, bool)
+                or not interval.is_integer()
+                or not MIN_KEEP_ONLINE_INTERVAL_MINUTES
+                <= interval
+                <= MAX_KEEP_ONLINE_INTERVAL_MINUTES
+            ):
+                errors["base"] = "invalid_interval"
+            elif not values[CONF_KEEP_ONLINE_WEEKDAYS] or start_time == end_time:
+                errors["base"] = "invalid_schedule"
+            else:
+                values[CONF_KEEP_ONLINE_INTERVAL_MINUTES] = int(interval)
+                return self.async_create_entry(title="", data=values)
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
                     vol.Required(
                         CONF_INCLUDE_MESSAGE_TEXT,
-                        default=self._entry.options.get(CONF_INCLUDE_MESSAGE_TEXT, False),
-                    ): bool
+                        default=values.get(CONF_INCLUDE_MESSAGE_TEXT, False),
+                    ): BooleanSelector(),
+                    vol.Required(
+                        CONF_KEEP_ONLINE,
+                        default=values.get(CONF_KEEP_ONLINE, DEFAULT_KEEP_ONLINE),
+                    ): BooleanSelector(),
+                    vol.Required(
+                        CONF_KEEP_ONLINE_WEEKDAYS,
+                        default=values.get(
+                            CONF_KEEP_ONLINE_WEEKDAYS,
+                            list(DEFAULT_KEEP_ONLINE_WEEKDAYS),
+                        ),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=list(KEEP_ONLINE_WEEKDAYS),
+                            multiple=True,
+                            translation_key=CONF_KEEP_ONLINE_WEEKDAYS,
+                        )
+                    ),
+                    vol.Required(
+                        CONF_KEEP_ONLINE_START_TIME,
+                        default=values.get(
+                            CONF_KEEP_ONLINE_START_TIME,
+                            DEFAULT_KEEP_ONLINE_START_TIME,
+                        ),
+                    ): TimeSelector(),
+                    vol.Required(
+                        CONF_KEEP_ONLINE_END_TIME,
+                        default=values.get(
+                            CONF_KEEP_ONLINE_END_TIME,
+                            DEFAULT_KEEP_ONLINE_END_TIME,
+                        ),
+                    ): TimeSelector(),
+                    vol.Required(
+                        CONF_KEEP_ONLINE_INTERVAL_MINUTES,
+                        default=values.get(
+                            CONF_KEEP_ONLINE_INTERVAL_MINUTES,
+                            DEFAULT_KEEP_ONLINE_INTERVAL_MINUTES,
+                        ),
+                    ): NumberSelector(
+                        NumberSelectorConfig(
+                            min=MIN_KEEP_ONLINE_INTERVAL_MINUTES,
+                            max=MAX_KEEP_ONLINE_INTERVAL_MINUTES,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement=UnitOfTime.MINUTES,
+                        )
+                    ),
                 }
             ),
+            errors=errors,
         )

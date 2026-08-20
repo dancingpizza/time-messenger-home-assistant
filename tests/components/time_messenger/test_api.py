@@ -197,6 +197,172 @@ async def test_disabled_capability_is_classified_as_unsupported() -> None:
         await client.async_get_me()
 
 
+async def test_users_me_unauthorized_is_terminal_auth_error() -> None:
+    response = Response(401, {})
+    client = TimeApiClient(
+        Session([response]),
+        "https://time.example",
+        StaticTokenProvider("secret"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(AuthError):
+        await client.async_get_me()
+
+    assert response.released is True
+
+
+@pytest.mark.parametrize("status", [200, 201])
+async def test_set_online_uses_bound_identity_and_accepts_valid_2xx(status: int) -> None:
+    response = Response(
+        status,
+        {
+            "user_id": "user-redacted",
+            "status": "online",
+            "manual": False,
+            "last_activity_at": 1_755_000_000_000,
+        },
+    )
+    session = Session([response])
+    client = TimeApiClient(
+        session,
+        "https://time.example",
+        StaticTokenProvider("secret"),  # type: ignore[arg-type]
+    )
+
+    assert await client.async_set_online("user-redacted") is True
+
+    method, url, kwargs = session.calls[0]
+    assert method == "PUT"
+    assert url == "https://time.example/api/v4/users/me/status"
+    assert kwargs["json"] == {"user_id": "user-redacted", "status": "online"}
+    assert kwargs["headers"]["Authorization"] == "Bearer secret"
+    assert kwargs["allow_redirects"] is False
+    assert response.released is True
+
+
+async def test_set_online_rechecks_guard_after_token_before_request() -> None:
+    guard_open = True
+
+    async def token_after_window_closes() -> str:
+        nonlocal guard_open
+        guard_open = False
+        return "secret"
+
+    response = Response(200, {"user_id": "user-redacted", "status": "online"})
+    session = Session([response])
+    client = TimeApiClient(
+        session,
+        "https://time.example",
+        SimpleNamespace(async_get_token=token_after_window_closes),  # type: ignore[arg-type]
+    )
+
+    assert (
+        await client.async_set_online(
+            "user-redacted",
+            request_guard=lambda: guard_open,
+        )
+        is False
+    )
+    assert session.calls == []
+    assert response.released is False
+
+
+@pytest.mark.parametrize(
+    ("status", "error_type"),
+    [
+        (401, AuthError),
+        (403, UnsupportedCapability),
+        (500, TransientError),
+        (503, TransientError),
+    ],
+)
+async def test_set_online_classifies_terminal_and_server_failures(
+    status: int, error_type: type[Exception]
+) -> None:
+    response = Response(status, {})
+    client = TimeApiClient(
+        Session([response]),
+        "https://time.example",
+        StaticTokenProvider("secret"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(error_type):
+        await client.async_set_online("user-redacted")
+
+    assert response.released is True
+
+
+async def test_set_online_preserves_rate_limit_retry_delay() -> None:
+    response = Response(429, {}, {"Retry-After": "17"})
+    client = TimeApiClient(
+        Session([response]),
+        "https://time.example",
+        StaticTokenProvider("secret"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(RateLimitError) as raised:
+        await client.async_set_online("user-redacted")
+
+    assert raised.value.retry_after == 17.0
+    assert response.released is True
+
+
+async def test_set_online_normalizes_transport_failure() -> None:
+    session = SimpleNamespace(request=AsyncMock(side_effect=ClientConnectionError("offline")))
+    client = TimeApiClient(
+        session,
+        "https://time.example",
+        StaticTokenProvider("secret"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(TransientError):
+        await client.async_set_online("user-redacted")
+
+
+@pytest.mark.parametrize("status", [400, 404])
+async def test_set_online_classifies_other_client_failures_as_protocol(
+    status: int,
+) -> None:
+    response = Response(status, {})
+    client = TimeApiClient(
+        Session([response]),
+        "https://time.example",
+        StaticTokenProvider("secret"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ProtocolError, match=f"HTTP {status}"):
+        await client.async_set_online("user-redacted")
+
+    assert response.released is True
+
+
+@pytest.mark.parametrize(
+    ("status", "payload"),
+    [
+        (200, NO_CONTENT),
+        (204, NO_CONTENT),
+        (200, []),
+        (200, {"user_id": "other-user", "status": "online"}),
+        (200, {"user_id": "user-redacted", "status": "away"}),
+        (200, {"user_id": "user-redacted"}),
+    ],
+)
+async def test_set_online_rejects_malformed_or_unconfirmed_success(
+    status: int, payload: Any
+) -> None:
+    response = Response(status, payload)
+    client = TimeApiClient(
+        Session([response]),
+        "https://time.example",
+        StaticTokenProvider("secret"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ProtocolError):
+        await client.async_set_online("user-redacted")
+
+    assert response.released is True
+
+
 async def test_rate_limit_reset_header_is_honored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("custom_components.time_messenger.api.client.time.time", lambda: 100.0)
     session = Session([Response(429, {}, {"X-RateLimit-Reset": "112"})])
@@ -579,7 +745,7 @@ async def test_websocket_connect_timeout_is_normalized() -> None:
         await client._async_connect()
 
 
-async def test_websocket_token_getter_is_inside_auth_timeout() -> None:
+async def test_websocket_unexpected_token_provider_failure_is_transient() -> None:
     provider = SimpleNamespace(async_get_token=AsyncMock(side_effect=RuntimeError("provider")))
     client = TimeWebSocketClient(
         SimpleNamespace(),
@@ -587,8 +753,26 @@ async def test_websocket_token_getter_is_inside_auth_timeout() -> None:
         provider,  # type: ignore[arg-type]
         auth_timeout=0.01,
     )
-    with pytest.raises(AuthError):
+    with pytest.raises(TransientError):
         await client._async_authenticate(SimpleNamespace(send_json=AsyncMock()))
+
+
+async def test_websocket_preserves_transient_token_provider_failure() -> None:
+    failure = TransientError("OAuth refresh temporarily failed")
+    provider = SimpleNamespace(async_get_token=AsyncMock(side_effect=failure))
+    socket = SimpleNamespace(send_json=AsyncMock())
+    client = TimeWebSocketClient(
+        SimpleNamespace(),
+        "https://time.example",
+        provider,  # type: ignore[arg-type]
+        auth_timeout=0.01,
+    )
+
+    with pytest.raises(TransientError) as raised:
+        await client._async_authenticate(socket)
+
+    assert raised.value is failure
+    socket.send_json.assert_not_awaited()
 
 
 async def test_websocket_close_is_bounded_when_peer_hangs() -> None:

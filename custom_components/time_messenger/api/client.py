@@ -7,7 +7,7 @@ import ipaddress
 import math
 import time
 from collections import OrderedDict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -141,6 +141,28 @@ class TimeApiClient:
             raise ProtocolError("users/me response has no user id")
         return payload
 
+    async def async_set_online(
+        self,
+        bound_user_id: str,
+        *,
+        request_guard: Callable[[], bool] | None = None,
+    ) -> bool:
+        """Set the bound account online if allowed immediately before sending."""
+
+        try:
+            response = await self._request(
+                "PUT",
+                "/api/v4/users/me/status",
+                json={"user_id": bound_user_id, "status": "online"},
+                request_guard=request_guard,
+            )
+        except _RequestSuppressed:
+            return False
+        payload = await _json_object(response)
+        if payload.get("user_id") != bound_user_id or payload.get("status") != "online":
+            raise ProtocolError("user status response did not confirm bound user online")
+        return True
+
     async def async_get_channel_type(self, channel_id: str) -> str | None:
         cached = self._channel_cache.get(channel_id)
         if cached is not None:
@@ -167,6 +189,7 @@ class TimeApiClient:
         path: str,
         *,
         authenticated: bool = True,
+        request_guard: Callable[[], bool] | None = None,
         **kwargs: Any,
     ) -> ClientResponse:
         headers = dict(kwargs.pop("headers", {}))
@@ -178,6 +201,8 @@ class TimeApiClient:
                         raise ProtocolError("authenticated request has no token provider")
                     token = await self._token_provider.async_get_token()
                     headers["Authorization"] = f"Bearer {token}"
+                if request_guard is not None and not request_guard():
+                    raise _RequestSuppressed
                 response = await self._session.request(
                     method,
                     origin_url(self.origin, path),
@@ -207,6 +232,10 @@ class TimeApiClient:
             response.release()
             raise ProtocolError(f"Time API returned HTTP {response.status}")
         return response
+
+
+class _RequestSuppressed(Exception):
+    """The caller's last-moment guard intentionally prevented a request."""
 
 
 async def _json_object(response: ClientResponse) -> dict[str, Any]:

@@ -4,7 +4,15 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+import voluptuous as vol
+from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.selector import (
+    BooleanSelector,
+    NumberSelector,
+    SelectSelector,
+    TimeSelector,
+)
 
 from custom_components.time_messenger.config_flow import (
     TimeMessengerConfigFlow,
@@ -16,7 +24,18 @@ from custom_components.time_messenger.const import (
     AUTH_MODE_SESSION,
     CONF_AUTH_MODE,
     CONF_INCLUDE_MESSAGE_TEXT,
+    CONF_KEEP_ONLINE,
+    CONF_KEEP_ONLINE_END_TIME,
+    CONF_KEEP_ONLINE_INTERVAL_MINUTES,
+    CONF_KEEP_ONLINE_START_TIME,
+    CONF_KEEP_ONLINE_WEEKDAYS,
     CONF_TENANT_ORIGIN,
+    DEFAULT_KEEP_ONLINE_END_TIME,
+    DEFAULT_KEEP_ONLINE_INTERVAL_MINUTES,
+    DEFAULT_KEEP_ONLINE_START_TIME,
+    DEFAULT_KEEP_ONLINE_WEEKDAYS,
+    MAX_KEEP_ONLINE_INTERVAL_MINUTES,
+    MIN_KEEP_ONLINE_INTERVAL_MINUTES,
 )
 
 
@@ -71,7 +90,7 @@ async def test_oauth_without_credentials_reshows_user_form_with_error() -> None:
     }
 
 
-async def test_oauth_without_credentials_aborts_during_reauth() -> None:
+async def test_oauth_without_credentials_keeps_reauth_action_open() -> None:
     flow = TimeMessengerConfigFlow()
     flow.hass = SimpleNamespace()  # type: ignore[assignment]
     flow._mode = AUTH_MODE_OAUTH
@@ -82,8 +101,48 @@ async def test_oauth_without_credentials_aborts_during_reauth() -> None:
         AsyncMock(return_value={}),
     ):
         result = await flow._async_next_auth_step()
-    assert result["type"] == FlowResultType.ABORT
-    assert result["reason"] == "oauth_not_configured"
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "oauth_credentials"
+    assert result["errors"] is None
+    assert result["data_schema"]({}) == {}
+
+
+async def test_oauth_reauth_resumes_after_credentials_are_restored() -> None:
+    flow = TimeMessengerConfigFlow()
+    flow.hass = SimpleNamespace()  # type: ignore[assignment]
+    flow._origin = "https://time.example"
+    implementation = SimpleNamespace()
+    with (
+        patch(
+            "custom_components.time_messenger.config_flow.config_entry_oauth2_flow.async_get_implementations",
+            AsyncMock(return_value={"https://time.example": implementation}),
+        ),
+        patch.object(
+            flow,
+            "async_step_auth",
+            AsyncMock(return_value={"type": FlowResultType.EXTERNAL_STEP}),
+        ) as auth,
+    ):
+        result = await flow.async_step_oauth_credentials({})
+    assert flow.flow_impl is implementation
+    auth.assert_awaited_once()
+    assert result == {"type": FlowResultType.EXTERNAL_STEP}
+
+
+@pytest.mark.parametrize(
+    ("mode", "step_id"),
+    [(AUTH_MODE_PAT, "pat"), (AUTH_MODE_SESSION, "session")],
+)
+async def test_credential_reauth_modes_stay_open_for_user_input(mode: str, step_id: str) -> None:
+    flow = TimeMessengerConfigFlow()
+    flow._mode = mode
+    flow._origin = "https://time.example"
+    flow._reauth_entry = SimpleNamespace(entry_id="entry")  # type: ignore[assignment]
+
+    result = await flow._async_next_auth_step()
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == step_id
 
 
 async def test_reauth_uses_existing_mode_and_origin() -> None:
@@ -115,12 +174,138 @@ async def test_finish_binds_unique_id_to_origin_and_user() -> None:
     assert result["data"][CONF_AUTH_MODE] == AUTH_MODE_PAT
 
 
-async def test_options_only_exposes_privacy_opt_in() -> None:
+async def test_options_exposes_privacy_and_online_keeper_defaults() -> None:
     flow = TimeMessengerOptionsFlow(SimpleNamespace(options={}))  # type: ignore[arg-type]
     result = await flow.async_step_init()
     assert result["type"].value == "form"
     schema = result["data_schema"]
-    assert schema({}) == {CONF_INCLUDE_MESSAGE_TEXT: False}
+    assert schema({}) == {
+        CONF_INCLUDE_MESSAGE_TEXT: False,
+        CONF_KEEP_ONLINE: False,
+        CONF_KEEP_ONLINE_WEEKDAYS: list(DEFAULT_KEEP_ONLINE_WEEKDAYS),
+        CONF_KEEP_ONLINE_START_TIME: DEFAULT_KEEP_ONLINE_START_TIME,
+        CONF_KEEP_ONLINE_END_TIME: DEFAULT_KEEP_ONLINE_END_TIME,
+        CONF_KEEP_ONLINE_INTERVAL_MINUTES: DEFAULT_KEEP_ONLINE_INTERVAL_MINUTES,
+    }
+    validators = {marker.schema: validator for marker, validator in schema.schema.items()}
+    assert isinstance(validators[CONF_INCLUDE_MESSAGE_TEXT], BooleanSelector)
+    assert isinstance(validators[CONF_KEEP_ONLINE], BooleanSelector)
+    assert isinstance(validators[CONF_KEEP_ONLINE_WEEKDAYS], SelectSelector)
+    assert validators[CONF_KEEP_ONLINE_WEEKDAYS].config["multiple"] is True
+    assert isinstance(validators[CONF_KEEP_ONLINE_START_TIME], TimeSelector)
+    assert isinstance(validators[CONF_KEEP_ONLINE_END_TIME], TimeSelector)
+    assert isinstance(validators[CONF_KEEP_ONLINE_INTERVAL_MINUTES], NumberSelector)
+
+
+async def test_options_preserves_existing_values_and_saves_all_fields() -> None:
+    existing = {
+        CONF_INCLUDE_MESSAGE_TEXT: True,
+        CONF_KEEP_ONLINE: True,
+        CONF_KEEP_ONLINE_WEEKDAYS: ["tue", "thu"],
+        CONF_KEEP_ONLINE_START_TIME: "08:30:00",
+        CONF_KEEP_ONLINE_END_TIME: "17:15:00",
+        CONF_KEEP_ONLINE_INTERVAL_MINUTES: 7,
+    }
+    flow = TimeMessengerOptionsFlow(SimpleNamespace(options=existing))  # type: ignore[arg-type]
+
+    form = await flow.async_step_init()
+    assert form["data_schema"]({}) == existing
+
+    saved = await flow.async_step_init(existing)
+    assert saved["type"] == FlowResultType.CREATE_ENTRY
+    assert saved["data"] == existing
+
+
+async def test_options_normalizes_times_and_allows_cross_midnight_schedule() -> None:
+    flow = TimeMessengerOptionsFlow(SimpleNamespace(options={}))  # type: ignore[arg-type]
+    submitted = {
+        CONF_INCLUDE_MESSAGE_TEXT: False,
+        CONF_KEEP_ONLINE: True,
+        CONF_KEEP_ONLINE_WEEKDAYS: ["fri"],
+        CONF_KEEP_ONLINE_START_TIME: "22:00",
+        CONF_KEEP_ONLINE_END_TIME: "06:00",
+        CONF_KEEP_ONLINE_INTERVAL_MINUTES: 4,
+    }
+
+    result = await flow.async_step_init(submitted)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_KEEP_ONLINE_START_TIME] == "22:00:00"
+    assert result["data"][CONF_KEEP_ONLINE_END_TIME] == "06:00:00"
+
+
+@pytest.mark.parametrize(
+    ("weekdays", "start_time", "end_time"),
+    [([], "09:00:00", "18:00:00"), (["mon"], "09:00", "09:00:00")],
+)
+async def test_options_rejects_empty_weekdays_or_zero_length_window(
+    weekdays: list[str], start_time: str, end_time: str
+) -> None:
+    flow = TimeMessengerOptionsFlow(SimpleNamespace(options={}))  # type: ignore[arg-type]
+
+    result = await flow.async_step_init(
+        {
+            CONF_INCLUDE_MESSAGE_TEXT: False,
+            CONF_KEEP_ONLINE: True,
+            CONF_KEEP_ONLINE_WEEKDAYS: weekdays,
+            CONF_KEEP_ONLINE_START_TIME: start_time,
+            CONF_KEEP_ONLINE_END_TIME: end_time,
+            CONF_KEEP_ONLINE_INTERVAL_MINUTES: 4,
+        }
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_schedule"}
+    assert result["data_schema"]({})[CONF_KEEP_ONLINE_WEEKDAYS] == weekdays
+
+
+@pytest.mark.parametrize(
+    "interval",
+    [MIN_KEEP_ONLINE_INTERVAL_MINUTES - 1, MAX_KEEP_ONLINE_INTERVAL_MINUTES + 1],
+)
+async def test_online_keeper_interval_schema_rejects_out_of_range_values(interval: int) -> None:
+    flow = TimeMessengerOptionsFlow(SimpleNamespace(options={}))  # type: ignore[arg-type]
+    result = await flow.async_step_init()
+
+    with pytest.raises(vol.Invalid):
+        result["data_schema"](
+            {
+                CONF_INCLUDE_MESSAGE_TEXT: False,
+                CONF_KEEP_ONLINE: True,
+                CONF_KEEP_ONLINE_INTERVAL_MINUTES: interval,
+            }
+        )
+
+
+async def test_online_keeper_rejects_fractional_interval() -> None:
+    flow = TimeMessengerOptionsFlow(SimpleNamespace(options={}))  # type: ignore[arg-type]
+    result = await flow.async_step_init(
+        {
+            CONF_INCLUDE_MESSAGE_TEXT: False,
+            CONF_KEEP_ONLINE: True,
+            CONF_KEEP_ONLINE_WEEKDAYS: ["mon"],
+            CONF_KEEP_ONLINE_START_TIME: "09:00:00",
+            CONF_KEEP_ONLINE_END_TIME: "18:00:00",
+            CONF_KEEP_ONLINE_INTERVAL_MINUTES: 4.5,
+        }
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_interval"}
+
+
+async def test_online_keeper_schedule_schema_rejects_unknown_day_and_invalid_time() -> None:
+    flow = TimeMessengerOptionsFlow(SimpleNamespace(options={}))  # type: ignore[arg-type]
+    schema = (await flow.async_step_init())["data_schema"]
+
+    with pytest.raises(vol.Invalid):
+        schema({CONF_KEEP_ONLINE_WEEKDAYS: ["holiday"]})
+    with pytest.raises(vol.Invalid):
+        schema({CONF_KEEP_ONLINE_START_TIME: "25:00:00"})
+
+
+def test_options_flow_uses_home_assistant_reload_helper() -> None:
+    assert issubclass(TimeMessengerOptionsFlow, config_entries.OptionsFlowWithReload)
 
 
 async def test_session_password_and_mfa_are_never_persisted() -> None:

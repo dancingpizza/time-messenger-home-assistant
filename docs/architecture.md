@@ -20,6 +20,10 @@ flowchart LR
     Session["Session provider"] --> Token
     Token --> API["Time v4 adapter"]
     API --> WS["Supervised WebSocket"]
+    API --> Health["Periodic auth health"]
+    API --> Presence["Scheduled online keeper"]
+    Health --> Reauth["HA reauth"]
+    Presence --> Status["Time user status"]
     WS --> Normalize["Canonicalizer"]
     API --> Normalize
     Normalize --> Filter["Direct + foreign filter"]
@@ -60,15 +64,25 @@ Setup нормализует HTTPS origin, выполняет `GET /api/v4/users
 смена сервера проходит reconfigure и полный gate. HTTP разрешён только для
 loopback test fixtures.
 
-### AD-5 — Один supervised WebSocket на ConfigEntry
+### AD-5 — Один supervised WebSocket и entry-owned background tasks
 
-ConfigEntry создаёт ровно одну async-задачу после gate. Reconnect использует
-full jitter в пределах последовательных caps `1, 2, 4, 8, 16, 32, 60` секунд;
-cap сбрасывается после 60 секунд здорового соединения, не только после
-`hello`. Unload сначала инвалидирует runtime generation, затем отменяет и
-ожидает задачу и закрывает socket; late callbacks с прежней generation не
-публикуют события и не запускают reauth. Auth failure инициирует reauth
-вместо reconnect loop.
+После gate ConfigEntry создаёт один supervised WebSocket listener, одну
+runtime-owned health task и, только при явном opt-in, одну task поддержания
+online по недельному расписанию. Reconnect listener использует full jitter в пределах
+последовательных caps `1, 2, 4, 8, 16, 32, 60` секунд; cap сбрасывается после
+60 секунд здорового соединения, не только после `hello`. Health task выполняет
+`GET /api/v4/users/me` с базовым интервалом 15 минут и jitter `±10%`; проверки
+одной ConfigEntry не перекрываются. Unload сначала инвалидирует runtime
+generation, затем отменяет и ожидает все entry-owned задачи и закрывает socket; late
+callbacks с прежней generation не публикуют события и не запускают reauth.
+Auth failure из listener или health task останавливает listener и инициирует
+reload вместо reconnect loop. Setup gate повторно подтверждает auth failure,
+переходит в стандартный `ConfigEntryAuthFailed`: поэтому HA отмечает карточку
+интеграции как `setup_error` и создаёт системное reauth-действие. Transient
+health failure не закрывает рабочий WebSocket; уже открытый reauth/reconfigure
+flow повторным reload не сбрасывается. Причина reload-пути, UI-контракт и
+отвергнутые альтернативы зафиксированы в
+[спеке auth health-check](specs/2026-08-19-auth-health-check.md#почему-reload-а-не-прямой-reauth).
 
 ### AD-6 — Только новое чужое сообщение в канале `D`
 
@@ -106,10 +120,14 @@ version.
 
 ### AD-9 — Единая классификация отказов
 
-`401` и terminal OAuth refresh failure запускают reauth; DNS/timeout/`5xx`
-остаются в supervisor retry; `429` уважает `Retry-After` или rate-limit
-reset; malformed event отбрасывается с redacted debug telemetry; unsupported
-tenant capability создаёт Repair issue.
+`401`, identity mismatch и terminal OAuth refresh failure запускают reauth и
+останавливают listener. DNS/timeout/`5xx` остаются retryable; transient failure
+периодического health-check не закрывает рабочий WebSocket и не запускает
+reauth. `429` уважает `Retry-After` или rate-limit reset; malformed event
+отбрасывается с redacted debug telemetry; unsupported tenant capability создаёт
+Repair issue. Для optional online keeper `403` или неподтверждённый protocol
+response останавливает только keeper и создаёт отдельный warning; `401`
+использует общий reauth path, transient/`429` не затрагивают listener.
 
 ### AD-10 — Time v4 изолирован адаптером
 
@@ -130,7 +148,14 @@ Probe на целевом tenant (`scripts/probe_time_tenant.py`) должен �
 `hello`, один `posted` для `D`, отбрасывание `G/P/O` и self-post, replay
 после reconnect без дубля, а также каждый из включённых auth modes.
 Административно отключённый mode остаётся реализованным, но показывается
-как unsupported.
+как unsupported. Перед включением online keeper в публичном релизе отдельная
+контролируемая проверка должна подтвердить self-status PUT, форму ответа,
+фактический away timeout и влияние на DND/push выбранного tenant.
+
+Для `0.0.6` принят ограниченный release exception: keeper публикуется строго
+выключенным по умолчанию и с маркировкой «экспериментально» до live-проверки на
+целевом tenant. Это не считается прохождением acceptance gate и не разрешает
+снимать предупреждение или обещать постоянный online в следующих релизах.
 
 ### AD-13 — Раздельные unload и removal
 
@@ -139,6 +164,17 @@ Unload только останавливает runtime по AD-5. Удалени
 session выполняет best-effort `/api/v4/users/logout`. OAuth/PAT remote
 revoke разрешён только через подтверждённый endpoint выбранного tenant; его
 отсутствие не блокирует локальное удаление.
+
+### AD-14 — Online keeper является opt-in side effect с недельным окном
+
+Интеграция никогда не поддерживает presence скрыто. При включении immutable
+расписание использует локальный timezone Home Assistant, границы `[start,end)`,
+weekday как день начала overnight-окна и целый cadence `1..60` минут. Только
+внутри окна task вызывает `PUT /api/v4/users/me/status` с bound identity и
+проверяет подтверждение той же identity/status. Снаружи окна нет status PUT и
+нет принудительного `offline`; сообщения для presence не создаются. Полный
+контракт, DST, Repairs и отвергнутые альтернативы — в
+[спеке scheduled online keeper](specs/2026-08-19-scheduled-online-keeper.md).
 
 ## Конвенции согласованности
 
@@ -171,7 +207,8 @@ custom_components/time_messenger/
   application_credentials.py   # OAuth endpoints, производные от tenant
   const.py                     # публичные имена и schema version
   models.py                    # канонические immutable модели и порты
-  runtime.py                   # per-entry supervisor, composition root
+  runtime.py                   # listener, auth-health и optional presence lifecycle
+  schedule.py                  # pure weekly schedule, overnight и DST semantics
   pipeline.py                  # canonicalize, filter, dedupe, publish orchestration
   dedupe.py                    # состояние на основе Home Assistant Store
   event.py                     # schema time_messenger_event, publisher и EventEntity
@@ -201,6 +238,9 @@ stateDiagram-v2
     Connecting --> Listening: hello
     Listening --> Retry: transient disconnect
     Listening --> Reauth: auth rejected
+    Listening --> Listening: periodic auth health OK or transient
+    Listening --> Listening: scheduled online PUT or optional keeper failure
+    Listening --> Reauth: health 401, terminal refresh, identity mismatch
     Retry --> Connecting: jitter delay elapsed
     Reauth --> Validating: user completes same auth mode
     Listening --> [*]: ConfigEntry unload
@@ -222,5 +262,7 @@ stateDiagram-v2
 ## Связанные документы
 
 - [docs/specs/2026-08-11-time-messenger-integration.md](specs/2026-08-11-time-messenger-integration.md) — контракт core-функциональности (capabilities, constraints, non-goals).
+- [docs/specs/2026-08-19-auth-health-check.md](specs/2026-08-19-auth-health-check.md) — контракт периодической проверки credentials и запуска reauth.
+- [docs/specs/2026-08-19-scheduled-online-keeper.md](specs/2026-08-19-scheduled-online-keeper.md) — контракт opt-in поддержания online по недельному расписанию.
 - [docs/specs/2026-08-11-hacs-packaging.md](specs/2026-08-11-hacs-packaging.md) — контракт HACS-упаковки, релизов и CI-валидации.
 - [docs/style-guide.md](style-guide.md) — голос и тон пользовательской документации.
