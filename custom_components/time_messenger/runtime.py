@@ -99,17 +99,21 @@ class TimeMessengerRuntime:
             return
         self._generation += 1
         generation = self._generation
+        # These loops live until unload; tracked setup tasks would block HA startup.
         if self._health_check is not None:
-            self._health_task = self._hass.async_create_task(
+            self._health_task = self._entry.async_create_background_task(
+                self._hass,
                 self._async_health_loop(generation),
                 f"time_messenger_{self._entry.entry_id}_auth_health",
             )
         if self._keep_online is not None:
-            self._keep_online_task = self._hass.async_create_task(
+            self._keep_online_task = self._entry.async_create_background_task(
+                self._hass,
                 self._async_keep_online_loop(generation),
                 f"time_messenger_{self._entry.entry_id}_keep_online",
             )
-        self._task = self._hass.async_create_task(
+        self._task = self._entry.async_create_background_task(
+            self._hass,
             self._async_supervise(generation),
             f"time_messenger_{self._entry.entry_id}",
         )

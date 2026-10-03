@@ -32,10 +32,17 @@ class Hass:
     def __init__(self) -> None:
         self.config_entries = SimpleNamespace(async_schedule_reload=Mock())
 
-    def async_create_task(
+    def async_create_background_task(
         self, coroutine: object, _name: str, **_kwargs: object
     ) -> asyncio.Task[None]:
         return asyncio.create_task(coroutine)  # type: ignore[arg-type]
+
+
+class Entry(SimpleNamespace):
+    def async_create_background_task(
+        self, hass: Hass, coroutine: object, name: str
+    ) -> asyncio.Task[None]:
+        return hass.async_create_background_task(coroutine, name)
 
 
 class BlockingWebSocket:
@@ -56,7 +63,7 @@ class BlockingWebSocket:
 
 async def test_start_is_idempotent_and_unload_leaves_no_task() -> None:
     websocket = BlockingWebSocket()
-    entry = SimpleNamespace(entry_id="entry")
+    entry = Entry(entry_id="entry")
     runtime = TimeMessengerRuntime(
         Hass(),
         entry,
@@ -85,7 +92,7 @@ async def test_enabled_keep_online_task_is_owned_and_cancelled_with_runtime() ->
     websocket = BlockingWebSocket()
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         websocket,
         AsyncMock(),
         keep_online=AsyncMock(side_effect=TransientError("offline")),
@@ -123,7 +130,7 @@ def test_keep_online_runtime_parts_cannot_be_partially_configured(
     with pytest.raises(ValueError, match="belong together"):
         TimeMessengerRuntime(
             Hass(),
-            SimpleNamespace(entry_id="entry"),
+            Entry(entry_id="entry"),
             BlockingWebSocket(),
             AsyncMock(),
             **kwargs,  # type: ignore[arg-type]
@@ -135,7 +142,7 @@ def test_keep_online_interval_must_be_positive_and_finite(interval: float) -> No
     with pytest.raises(ValueError, match="finite and positive"):
         TimeMessengerRuntime(
             Hass(),
-            SimpleNamespace(entry_id="entry"),
+            Entry(entry_id="entry"),
             BlockingWebSocket(),
             AsyncMock(),
             keep_online=AsyncMock(),
@@ -159,7 +166,7 @@ class FailingWebSocket:
 
 async def test_terminal_auth_reloads_same_entry_to_surface_failure_without_retry() -> None:
     hass = Hass()
-    entry = SimpleNamespace(entry_id="entry", async_get_active_flows=Mock(return_value=iter(())))
+    entry = Entry(entry_id="entry", async_get_active_flows=Mock(return_value=iter(())))
     websocket = FailingWebSocket(AuthError("expired"))
     runtime = TimeMessengerRuntime(hass, entry, websocket, AsyncMock())  # type: ignore[arg-type]
     await runtime.async_start()
@@ -171,7 +178,7 @@ async def test_terminal_auth_reloads_same_entry_to_surface_failure_without_retry
 
 async def test_health_check_runs_periodically_while_listener_is_alive() -> None:
     hass = Hass()
-    entry = SimpleNamespace(entry_id="entry")
+    entry = Entry(entry_id="entry")
     websocket = BlockingWebSocket()
     checked_twice = asyncio.Event()
     check_count = 0
@@ -214,7 +221,7 @@ async def test_slow_health_checks_never_overlap() -> None:
 
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         health_check=health_check,
@@ -240,7 +247,7 @@ async def test_slow_health_checks_never_overlap() -> None:
 def test_health_check_delay_has_ten_percent_jitter(pick_delay: object, expected: float) -> None:
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         health_check=AsyncMock(),
@@ -253,7 +260,7 @@ def test_health_check_delay_has_ten_percent_jitter(pick_delay: object, expected:
 
 async def test_health_auth_reloads_once_and_stops_both_tasks() -> None:
     hass = Hass()
-    entry = SimpleNamespace(entry_id="entry", async_get_active_flows=Mock(return_value=iter(())))
+    entry = Entry(entry_id="entry", async_get_active_flows=Mock(return_value=iter(())))
     websocket = BlockingWebSocket()
     health_check = AsyncMock(side_effect=AuthError("expired"))
     runtime = TimeMessengerRuntime(
@@ -282,7 +289,7 @@ async def test_health_auth_reloads_once_and_stops_both_tasks() -> None:
 
 async def test_auth_failure_does_not_reset_active_reauth_flow() -> None:
     hass = Hass()
-    entry = SimpleNamespace(
+    entry = Entry(
         entry_id="entry",
         async_get_active_flows=Mock(return_value=iter(({"flow_id": "active"},))),
     )
@@ -303,7 +310,7 @@ async def test_auth_failure_does_not_reset_active_reauth_flow() -> None:
 )
 async def test_retryable_health_failure_does_not_reload(failure: Exception) -> None:
     hass = Hass()
-    entry = SimpleNamespace(entry_id="entry")
+    entry = Entry(entry_id="entry")
     websocket = BlockingWebSocket()
     recovered = asyncio.Event()
     check_count = 0
@@ -342,7 +349,7 @@ async def test_unload_cancels_health_check_task() -> None:
 
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         health_check=health_check,
@@ -362,7 +369,7 @@ async def test_unload_cancels_health_check_task() -> None:
 
 async def test_late_health_auth_after_generation_invalidation_does_not_reload() -> None:
     hass = Hass()
-    entry = SimpleNamespace(entry_id="entry")
+    entry = Entry(entry_id="entry")
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -399,7 +406,7 @@ async def test_keep_online_makes_no_request_outside_schedule(
     keep_online = AsyncMock(return_value=True)
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         keep_online=keep_online,
@@ -432,7 +439,7 @@ async def test_keep_online_calls_immediately_inside_window_and_uses_interval(
     )
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         keep_online=keep_online,
@@ -469,7 +476,7 @@ async def test_suppressed_late_request_keeps_cadence_without_clearing_issue(
     )
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         keep_online=AsyncMock(return_value=False),
@@ -497,7 +504,7 @@ async def test_keep_online_keeps_full_cadence_near_window_end(
 ) -> None:
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         keep_online=AsyncMock(side_effect=TransientError("offline")),
@@ -536,7 +543,7 @@ async def test_keep_online_retryable_failure_waits_without_stopping_listener(
     hass = Hass()
     runtime = TimeMessengerRuntime(
         hass,
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         keep_online=AsyncMock(side_effect=failure),
@@ -576,7 +583,7 @@ async def test_request_crossing_window_end_keeps_retry_after(
     )
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         keep_online=rate_limited_after_window_closes,
@@ -613,7 +620,7 @@ async def test_keep_online_permanent_failure_stops_only_keeper_and_creates_repai
     )
     runtime = TimeMessengerRuntime(
         hass,
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         keep_online=AsyncMock(side_effect=failure),
@@ -640,7 +647,7 @@ async def test_keep_online_permanent_failure_stops_only_keeper_and_creates_repai
 
 async def test_keep_online_auth_failure_uses_standard_reauth_path() -> None:
     hass = Hass()
-    entry = SimpleNamespace(
+    entry = Entry(
         entry_id="entry",
         async_get_active_flows=Mock(return_value=iter(())),
     )
@@ -679,7 +686,7 @@ async def test_unload_during_auth_socket_close_suppresses_late_reload() -> None:
             self.closed = True
 
     hass = Hass()
-    entry = SimpleNamespace(entry_id="entry")
+    entry = Entry(entry_id="entry")
     websocket = YieldingCloseWebSocket()
     runtime = TimeMessengerRuntime(hass, entry, websocket, AsyncMock())  # type: ignore[arg-type]
     runtime._generation = 1
@@ -696,7 +703,7 @@ async def test_unload_during_auth_socket_close_suppresses_late_reload() -> None:
 async def test_unsupported_capability_creates_repair_and_stops(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    entry = SimpleNamespace(entry_id="entry")
+    entry = Entry(entry_id="entry")
     websocket = FailingWebSocket(UnsupportedCapability("disabled"))
     create_issue = Mock()
     monkeypatch.setattr(
@@ -716,7 +723,7 @@ async def test_unsupported_capability_creates_repair_and_stops(
 async def test_retry_uses_bounded_jitter_and_respects_rate_limit(
     monkeypatch: pytest.MonkeyPatch, error: Exception, expected_minimum: float
 ) -> None:
-    entry = SimpleNamespace(entry_id="entry")
+    entry = Entry(entry_id="entry")
     websocket = FailingWebSocket(error)
     runtime = TimeMessengerRuntime(
         Hass(),
@@ -743,7 +750,7 @@ async def test_zero_jitter_still_waits_at_least_one_second(
 ) -> None:
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         FailingWebSocket(TransientError("offline")),
         AsyncMock(),
         random_uniform=lambda _low, _high: 0.0,
@@ -766,7 +773,7 @@ async def test_rate_limit_delay_remains_finite_and_bounded(
 ) -> None:
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         FailingWebSocket(RateLimitError(delay)),
         AsyncMock(),
         random_uniform=lambda _low, _high: 0.0,
@@ -790,7 +797,7 @@ async def test_unexpected_listener_exception_retries_instead_of_killing_supervis
     websocket = FailingWebSocket(RuntimeError("payload must not escape"))
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         websocket,
         AsyncMock(),
         random_uniform=lambda _low, _high: 0.0,
@@ -812,7 +819,7 @@ async def test_generation_guard_blocks_late_callback() -> None:
     pipeline = AsyncMock()
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         pipeline,
     )  # type: ignore[arg-type]
@@ -825,7 +832,7 @@ async def test_unload_detaches_owned_ha_session_without_closing_it() -> None:
     session = SimpleNamespace(closed=False, detach=Mock(), close=AsyncMock())
     runtime = TimeMessengerRuntime(
         Hass(),
-        SimpleNamespace(entry_id="entry"),
+        Entry(entry_id="entry"),
         BlockingWebSocket(),
         AsyncMock(),
         owned_session=session,

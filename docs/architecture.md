@@ -66,6 +66,13 @@ loopback test fixtures.
 
 ### AD-5 — Один supervised WebSocket и entry-owned background tasks
 
+Долгоживущие циклы регистрируются через `ConfigEntry.async_create_background_task()`:
+они не входят в ожидание startup и отменяются при shutdown/unload. Runtime
+по-прежнему инвалидирует generation и ожидает отмену при собственной выгрузке.
+Использовать для этих циклов `hass.async_create_task()` нельзя: Home Assistant
+будет ждать их завершения до таймаута запуска. Регрессионная проверка
+`test_startup.py` использует настоящий Home Assistant и его ожидание setup-задач.
+
 После gate ConfigEntry создаёт один supervised WebSocket listener, одну
 runtime-owned health task и, только при явном opt-in, одну task поддержания
 online по недельному расписанию. Reconnect listener использует full jitter в пределах
